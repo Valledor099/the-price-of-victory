@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#051014"><meta name="description" content="Una final de boxeo en primera persona. Una experiencia de Fair Play sobre sportswashing para navegador y realidad virtual.">
+  <title>The Price of Victory — Fair Play</title>
+  <link rel="icon" href="assets/fairplay.png"><link rel="stylesheet" href="style.css">
+  <script src="vendor/aframe.min.js"></script>
+</head>
+<body>
+  <main id="lobby">
+    <header><img class="brand" src="assets/fairplay.png" alt="Fair Play"><span class="division">/</span><span class="micro">Experiencia interactiva</span>
+      <button id="audio" class="sound" aria-pressed="true"><span class="wave" aria-hidden="true">▂▆▄▇</span> <span>Sonido activado</span></button>
+    </header>
+    <section class="cover" aria-labelledby="title">
+      <div class="hero-copy">
+        <div class="eyebrow"><i></i> Final de campeonato</div>
+        <h1 id="title">The Price<br><em>of Victory</em></h1>
+        <p>El estadio está lleno. El cinturón te espera.<br>Entrá al ring y descubrí cuánto cuesta ganar.</p>
+        <div class="actions"><button id="start" class="primary" disabled><span>Preparando el ring</span><b aria-hidden="true">→</b></button><button id="vr" class="secondary" hidden>Entrar en VR</button></div>
+        <div class="details"><span>◷ &nbsp;2–3 min</span><span>Primera persona</span></div>
+      </div>
+      <div class="corner-mark" aria-hidden="true"></div>
+    </section>
+    <footer><div class="control-heading"><span class="micro">Cómo jugar</span><span>En computadora</span></div>
+      <div class="binding"><kbd>W A S D</kbd> Moverte</div><div class="binding"><kbd>Mouse</kbd> Mirar</div><div class="binding"><kbd>Clic</kbd> Golpear</div><div class="binding"><kbd>Espacio</kbd> Bloquear</div>
+      <button id="help" class="plain">Ver controles <span>↗</span></button>
+    </footer>
+  </main>
+  <div id="game" aria-label="Estadio de boxeo en primera persona"></div>
+  <div id="hud" hidden>
+    <div class="score"><span id="stage"></span><strong id="clock"></strong></div>
+    <div class="feedback" id="cue" role="status"></div>
+    <div class="game-tools"><button id="pause">Pausa</button></div>
+    <div id="stats"></div><div id="aim" hidden></div>
+  </div>
+  <dialog id="modal"><h2 id="modal-title"></h2><div id="modal-body"></div><div id="modal-buttons"></div></dialog>
+  <script type="module" src="src/game.js"></script>
+</body></html>
