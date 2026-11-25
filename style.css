@@ -11,3 +11,5 @@ dialog{background:#101f22;color:var(--paper);border:1px solid #61756d;border-rad
 @media(max-width:960px){footer{flex-wrap:wrap;justify-content:flex-start;padding-block:17px}.control-heading{margin-right:6px}.plain{margin-left:auto}}
 @media(max-width:650px){header{height:61px;gap:12px}.brand{width:132px}header .micro,header .division{display:none}.cover{min-height:530px;align-items:flex-end;padding-block:39px;background-position:62% center;background-image:linear-gradient(0deg,#051014 0%,#05101490 60%,#05101420),url('assets/cover.webp')}.hero-copy{width:100%}h1{font-size:clamp(72px,17vw,99px)}footer .binding{display:none}footer{min-height:70px;justify-content:space-between}.corner-mark{display:none}.sound{padding:8px 11px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.volume-control{display:flex;align-items:center;gap:14px;margin-top:18px;color:#d3dfd8}.volume-control input{min-width:40px;flex:1;accent-color:#a7c6b8}.volume-control output{min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
