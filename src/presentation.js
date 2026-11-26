@@ -1,3 +1,4 @@
+import {rowCount,seatHeight,seatRadius} from './stands.js';
 const T=AFRAME.THREE;
 
 // One camera-facing surface for both stereo and desktop. Redraw only on cue changes.
@@ -49,7 +50,7 @@ export function photographers(world) {
   c.fillStyle=g;c.fillRect(0,0,96,96);c.fillStyle='rgba(255,255,251,.80)';c.fillRect(46,12,4,72);c.fillRect(14,46,68,4);
   const map=new T.CanvasTexture(canvas);map.colorSpace=T.SRGBColorSpace;
   const group=new T.Group();group.name='Flashes de tribuna';world.add(group);
-  const sprites=Array.from({length:9},()=>{
+  const sprites=Array.from({length:32},()=>{
     const sprite=new T.Sprite(new T.SpriteMaterial({map,transparent:true,blending:T.AdditiveBlending,depthWrite:false,toneMapped:false}));
     group.add(sprite);sprite.visible=false;return sprite;
   });
@@ -61,13 +62,13 @@ export function photographers(world) {
       until-=dt;
       if(until<=0){
         sequence++;
-        until=.48+Math.random()*.52;
-        const burst=3+Math.floor(Math.random()*4);
+        until=.46+Math.random()*.31;
+        const burst=16+Math.floor(Math.random()*13);
         for(let i=0;i<burst;i++){
-          const s=sprites[i],row=Math.floor(Math.random()*6),a=Math.random()*Math.PI*2,r=8.4+row*1.28;
-          s.position.set(Math.cos(a)*r,.52+row*.68,Math.sin(a)*r);
+          const s=sprites[i],row=Math.floor(Math.random()*rowCount),a=(i+Math.random())*2*Math.PI/burst,r=seatRadius(row);
+          s.position.set(Math.cos(a)*r,seatHeight(row)+.95,Math.sin(a)*r);
           if(stage===0&&i===0)s.position.set((sequence%2?1:-1)*(.85+Math.random()*.65),1.45,3.9+Math.random()*2);
-          s.scale.setScalar(.42+Math.random()*.49);s.userData.age=-Math.random()*.13;s.visible=false;
+          s.scale.setScalar((stage===0&&i===0?.48:1.05)+Math.random()*.75);s.userData.age=-Math.random()*.26;s.visible=false;
         }
       }
       for(const s of sprites){

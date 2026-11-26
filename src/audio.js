@@ -5,7 +5,7 @@ export class Sound {
   crowdLevel = 0;
 
   async prepare() {
-    const names = ['bell', 'crowd'];
+    const names = ['bell', 'crowd', 'murmur'];
     this.files = Object.fromEntries(await Promise.all(names.map(async name => {
       const response = await fetch('assets/' + name + '.mp3');
       if (!response.ok) throw Error('No se pudo cargar el sonido de ' + name);
@@ -39,7 +39,7 @@ export class Sound {
 
   async loadSamples() {
     const ctx = this.ctx;
-    const [bell, crowd] = await Promise.all(['bell','crowd'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
+    const [bell, crowd, murmur] = await Promise.all(['bell','crowd','murmur'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
     this.bellBuffer = bell;
     // Skip leading recording silence so the strike lands on the round boundary.
     const data = bell.getChannelData(0);
@@ -61,6 +61,16 @@ export class Sound {
     room.loopStart = seam/crowd.sampleRate;
     room.connect(this.venue);
     room.start();
+    const voices=ctx.createBufferSource(), band=ctx.createBiquadFilter(), voicesGain=ctx.createGain();
+    voices.buffer=murmur;voices.loop=true;
+    band.type='bandpass';band.frequency.value=690;band.Q.value=.62;
+    // Bring out the mass of voices behind the cheering; both feed the same silence envelope.
+    const voiceData=murmur.getChannelData(0);
+    let power=0;
+    for(let i=0;i<voiceData.length;i++)power+=voiceData[i]*voiceData[i];
+    voicesGain.gain.value=Math.min(3,.21/Math.max(.01,Math.sqrt(power/voiceData.length)));
+    voices.connect(band).connect(voicesGain).connect(this.venue);
+    voices.start();
     this.foley = ctx.createBuffer(1, Math.ceil(ctx.sampleRate*.14), ctx.sampleRate);
     const noise = this.foley.getChannelData(0);
     for(let i=0;i<noise.length;i++) noise[i]=Math.random()*2-1;

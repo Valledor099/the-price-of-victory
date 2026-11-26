@@ -1,5 +1,6 @@
 import {boards} from './boards.js';
 import {centerCard,photographers} from './presentation.js';
+import {crowdFromStands} from './stands.js';
 const T=AFRAME.THREE;
 function entity(tag,parent,attrs={}) {
   const el=document.createElement(tag);
@@ -14,30 +15,12 @@ function model(parent,name){
     el.setAttribute('gltf-model','url(assets/'+name+'.glb)');parent.append(el);
   });
 }
-// All crowd members share the Blender spectator geometry and a handful of draw calls.
-function crowdFrom(template){
-  const group=new T.Group(), seats=[], transform=new T.Object3D();
-  for(let row=0;row<7;row++){
-    const count=64+row*6;
-    for(let i=0;i<count;i++){
-      const a=(i+.25*(row%2))*2*Math.PI/count;
-      if(Math.sin(a)>.94&&Math.abs(Math.cos(a))<.26)continue;
-      const r=8.55+row*1.28, size=.80+.23*((i*17+row*7)%13)/12;
-      transform.position.set(Math.cos(a)*r,-.59+row*.68,Math.sin(a)*r);
-      transform.rotation.y=-a-Math.PI/2;transform.scale.setScalar(size);transform.updateMatrix();
-      seats.push(transform.matrix.clone());
-    }
-  }
-  template.updateMatrixWorld(true);template.traverse(node=>{
-    if(!node.isMesh)return;
-    const mesh=new T.InstancedMesh(node.geometry,node.material.clone(),seats.length);
-    seats.forEach((matrix,i)=>{mesh.setMatrixAt(i,matrix.clone().multiply(node.matrixWorld));mesh.setColorAt(i,new T.Color(['#ffe5bb','#b2c3cf','#cc9488','#e6ece5'][i%4]));});
-    group.add(mesh);
-  });template.visible=false;return group;
-}
-function pivotArm(body,name,x,y){
-  const arm=body.getObjectByName(name);if(!arm)return new T.Group();
-  const pivot=new T.Group();body.add(pivot);pivot.position.set(x,y,0);body.updateWorldMatrix(true,true);pivot.attach(arm);return pivot;
+function joint(model,name) {
+  const bone=model.getObjectByName(name);
+  if(!bone?.isBone)throw Error('Falta la articulación '+name);
+  const rest=bone.quaternion.clone(),delta=new T.Quaternion();
+  const x=new T.Vector3(1,0,0),z=new T.Vector3(0,0,1);
+  return (angle,sideways=false)=>bone.quaternion.copy(rest).multiply(delta.setFromAxisAngle(sideways?z:x,angle));
 }
 export async function createWorld(tick) {
   AFRAME.registerComponent('match-loop',{tick(t,dt){if(dt)tick(Math.min(dt/1000,.12));}});
@@ -47,25 +30,25 @@ export async function createWorld(tick) {
   scene.setAttribute('renderer','antialias:true; colorManagement:true; highRefreshRate:true');
   scene.setAttribute('light','defaultLightsEnabled:false');
   scene.setAttribute('webxr','referenceSpaceType: local-floor; optionalFeatures: bounded-floor, local-floor');
-  scene.setAttribute('background','color: #172324');scene.setAttribute('fog','type: exponential; color:#172324; density:.035');
-  const rig=entity('a-entity',scene,{id:'rig'}),camera=entity('a-entity',rig,{camera:'near:.04;far:70;fov:75','look-controls':'pointerLockEnabled:false; touchEnabled:true',position:'0 1.65 0'});
+  scene.setAttribute('background','color: #172324');scene.setAttribute('fog','type: exponential; color:#172324; density:.018');
+  const rig=entity('a-entity',scene,{id:'rig'}),camera=entity('a-entity',rig,{camera:'near:.04;far:100;fov:75','look-controls':'pointerLockEnabled:false; touchEnabled:true',position:'0 1.65 0'});
   const hands=['left','right'].map(hand=>entity('a-entity',rig,{'laser-controls':'hand:'+hand,'raycaster':'enabled:false','line':'visible:false'}));
   document.querySelector('#game').append(scene);
   if(!scene.hasLoaded)await new Promise(resolve=>scene.addEventListener('loaded',resolve,{once:true}));
-  const [arena,opponent,ref,glove,belt,fan]=await Promise.all(['arena','opponent','referee','glove','belt','spectator'].map(n=>model(scene,n)));
+  const [arena,opponent,ref,glove,belt]=await Promise.all(['arena','opponent','referee','glove','belt'].map(n=>model(scene,n)));
   const world=scene.object3D;
   const ribbon=arena.getObjectByName('Ribbon');
   const ambient=new T.HemisphereLight(0xffecdb,0x6b7471,2.1), key=new T.DirectionalLight(0xffdbad,2.8),rim=new T.DirectionalLight(0x97d7ee,1.9);
   key.position.set(3,7,4);rim.position.set(-4,4,-3);world.add(ambient,key,rim);
-  const crowd=crowdFrom(fan);world.add(crowd);glove.visible=false;belt.visible=false;
+  const crowd=crowdFromStands();world.add(crowd);glove.visible=false;belt.visible=false;
   const attachGlove=(parent,i)=>{
     const g=glove.clone(true);g.visible=true;g.scale.x=i?1:-1;parent.add(g);g.rotation.set(-.36,0,i?-.14:.14);return g;
   };
   const desk=[0,1].map(i=>attachGlove(camera.object3D,i));
   const xr=hands.map((hand,i)=>attachGlove(hand.object3D,i));
   for(const hand of hands)hand.addEventListener('controller-model-ready',()=>{const mesh=hand.getObject3D('mesh');if(mesh)mesh.visible=false;});
-  const refArm=pivotArm(ref,'RefL',-.27,1.41);
-  const fists=[pivotArm(opponent,'FistL',-.27,1.41),pivotArm(opponent,'FistR',.27,1.41)];
+  const refArm=joint(ref,'DriveL');
+  const fists=['L','R'].map(side=>({upper:joint(opponent,'Drive'+side),fore:joint(opponent,'Fore'+side)}));
   const display=await boards(world);
   const card=centerCard(scene.camera),flashes=photographers(world);
   crowd.name='Afición';belt.name='Cinturón';

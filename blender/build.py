@@ -153,111 +153,31 @@ def glove(g,x,y,z,color,side=1):
             bar(g,"thread",(x+j-.008,y-.110,z-.014+face*.077),(x+j+.008,y-.087,z-.014+face*.077),.0025,6)
 
 
-def face(g,skin,official):
-    # Jaw, cheeks, temples and hairline share a forward-facing profile.
-    loft(g,skin,[(0,1.535,.042,.050,.058),(0,1.555,.038,.078,.085),
-                 (0,1.595,.023,.101,.111),(0,1.65,.013,.119,.124),
-                 (0,1.705,.004,.126,.132),(0,1.754,-.002,.124,.132),
-                 (0,1.803,-.009,.101,.112),(0,1.832,-.011,.056,.071)],32)
-    for side in (-1,1):
-        oval(g,skin,side*.123,1.673,.004,.023,.038,.021)
-        oval(g,"lip",side*.139,1.674,.013,.008,.02,.009)
-        x=side*.047
-        oval(g,"linen",x,1.694,.132,.022,.009,.007,20)
-        oval(g,"iris",x,1.694,.139,.009,.008,.003,16)
-        oval(g,"paper",x-.002,1.697,.142,.002,.002,.001,8)
-        contour(g,"hair",[(side*.022,1.708,.137),(side*.048,1.719,.132),(side*.078,1.716,.115)],.0055)
-        contour(g,skin,[(side*.024,1.698,.138),(side*.047,1.704,.139),(side*.068,1.697,.132)],.0028)
-    loft(g,skin,[(0,1.635,.142,.021,.013),(0,1.648,.15,.027,.018),
-                 (0,1.663,.15,.020,.020),(0,1.69,.132,.013,.013),(0,1.712,.128,.011,.010)])
-    contour(g,"lip",[(-.039,1.603,.125),(-.017,1.608,.133),(0,1.606,.136),(.019,1.608,.132),(.039,1.605,.125)],.0036)
-    loft(g,"hair",[(0,1.745,-.011,.127,.132),(0,1.777,-.01,.126,.132),
-                   (0,1.814,-.01,.111,.12),(0,1.843,-.01,.079,.089),(0,1.853,-.01,.025,.036)],32)
-    for side in (-1,1):
-        oval(g,"hair",side*.119,1.731,-.010,.012,.032,.048)
-    if official:
-        for i in range(5):
-            contour(g,"trim",[(-.098+.019*i,1.808,.063),(-.059+.020*i,1.839,.031),(.003+.02*i,1.837,-.034)],.004)
-    else:
-        for row in range(3):
-            n=18-row*4
-            for i in range(n):
-                ang=(i+.47*row)*2*pi/n
-                oval(g,"hair",(.102-row*.027)*cos(ang),1.798+row*.023,-.01+(.109-row*.025)*sin(ang),.027,.023,.027,10)
-
-
 def human(ref=False):
-    body="Official" if ref else "Boxer"
-    skin="skin2" if ref else "skin"
-    for side in (-1,1):
-        x=side*(.135 if ref else .165); z=side*(.035 if ref else .125)
-        foot=[(.012,.084,.141),(.026,.088,.147),(.061,.085,.143),(.096,.075,.108),(.125,.064,.075)]
-        loft(body,"black",[(x,h,z+.036,a,b) for h,a,b in foot],22)
-        loft(body,"trouser" if ref else "linen",[(x,.014,z+.037,.085,.144),(x,.029,z+.037,.089,.149)],22)
-        if ref:
-            loft(body,"trouser",[(x,.095,z,.079,.095),(x,.22,z,.078,.081),(x,.45,z,.086,.083),
-                                 (x,.53,z,.092,.097),(side*.12,.76,0,.114,.135),(side*.104,.91,0,.115,.13)],22)
-        else:
-            muscle(body,skin,(x,.17,z),(x,.65,z*.72),[(0,.048,.052),(.29,.059,.068),(.53,.079,.088),(.72,.073,.081),(1,.084,.088)])
-            loft(body,"trunks",[(x,.086,z,.074,.093),(x,.174,z,.065,.071),(x,.267,z,.062,.063)],20)
-            for h in (.242,.255):
-                loft(body,"thread",[(x,h,z,.064,.065),(x,h+.005,z,.064,.065)],20)
-            for i in range(4):
-                bar(body,"linen",(x-.029,.098+i*.021,z+.086-i*.006),(x+.029,.105+i*.021,z+.086-i*.006),.0028,6)
-            loft(body,"trunks",[(x,.57,z*.56,.116,.138),(x,.612,z*.55,.123,.144),
-                                (side*.126,.77,z*.28,.131,.149),(side*.104,.894,0,.119,.142)],24)
-            loft(body,"thread",[(x,.578,z*.56,.118,.140),(x,.591,z*.56,.121,.143)],24)
-    loft(body,"trouser" if ref else "trunks",[(0,.75,0,.211,.143),(0,.834,0,.225,.155),(0,.95,0,.195,.135)],26)
-    loft(body,"black" if ref else "thread",[(0,.898,0,.21,.147),(0,.915,0,.212,.149),(0,.961,0,.198,.14)],26)
-    box(body,"steel" if ref else "trunks",0,.933,.145,.061,.03,.008)
-    top="paper" if ref else skin
-    loft(body,top,[(0,.956,0,.194,.135),(0,1.053,-.005,.191,.142),(0,1.155,-.01,.206,.148),
-                   (0,1.239,0,.241,.164),(0,1.329,.008,.271,.18),(0,1.393,.005,.287,.17),
-                   (0,1.439,-.006,.259,.147),(0,1.484,-.012,.146,.119),(0,1.496,0,.099,.09)],30)
-    loft(body,skin,[(0,1.454,0,.113,.10),(0,1.51,0,.089,.08),(0,1.587,.013,.084,.08)])
-    if ref:
-        for side in (-1,1):
-            geometry(body,"linen",[(0,1.475,.092),(side*.097,1.485,.066),(side*.070,1.393,.162),(0,1.434,.147)],[(0,1,2,3)])
-            oval(body,"black",side*.026,1.433,.157,.031,.019,.009,14)
-        contour(body,"linen",[(0,.97,.137),(0,1.16,.144),(0,1.327,.189),(0,1.413,.162)],.005)
-        for y,z in [(1.04,.143),(1.15,.149),(1.24,.166),(1.34,.191)]:
-            oval(body,"black",0,y,z,.005,.005,.003,8)
-        box(body,"linen",.131,1.323,.158,.084,.065,.010)
-        box(body,"trunks",.131,1.337,.165,.057,.022,.006)
-    else:
-        for side in (-1,1):
-            oval(body,skin,side*.123,1.339,.132,.132,.081,.053,24)
-            contour(body,skin,[(side*.044,1.432,.151),(side*.109,1.443,.138),(side*.197,1.43,.107)],.011)
-    face(body,skin,ref)
-    for side in (-1,1):
-        arm=("Ref" if ref else "Fist")+("L" if side<0 else "R")
-        shoulder=(side*.255,1.397,0)
-        elbow=(side*(.335 if ref else .357),1.147,.068)
-        hand=(side*(.33 if ref else .212),.961 if ref else (1.446+side*.035),.12 if ref else (.291+side*.047))
-        muscle(arm,top,shoulder,elbow,[(0,.081,.082),(.14,.111,.116),(.35,.102,.107),(.62,.082,.087),(.85,.073,.076),(1,.068,.069)])
-        oval(arm,skin,*elbow,.068,.070,.064)
-        muscle(arm,skin,elbow,hand,[(0,.064,.061),(.22,.078,.073),(.51,.068,.061),(.82,.047,.043),(1,.044,.043)])
-        if ref:
-            muscle(arm,"linen",shoulder,elbow,[(.67,.084,.088),(.72,.083,.086)])
-            oval(arm,skin,*hand,.052,.065,.032)
-            for j in range(4):
-                finger=(hand[0]+side*(j-1.5)*.021,hand[1]-.041,hand[2]+.004)
-                oval(arm,skin,*finger,.011,.044-.006*abs(j-1),.012,12)
-            oval(arm,skin,hand[0]-side*.046,hand[1]-.006,hand[2]+.014,.016,.039,.017,12)
-        else:
-            glove(arm,*hand,"oxblood",side)
-    export("referee" if ref else "opponent")
+    # The .blend contains the fitted MakeHuman assets, bound muscles and packed skin maps.
+    # Append the whole rig hierarchy when rebuilding in a fresh Blender session.
+    name="referee" if ref else "opponent"
+    source=Path(__file__).with_name("FairPlay.blend")
+    with bpy.data.libraries.load(str(source),link=False) as (data,loaded):
+        loaded.collections=["Athletes / "+name]
+    coll=loaded.collections[0]
+    scene.collection.children.link(coll)
+    for obj in list(coll.objects):
+        if not obj.parent: obj.location=(0,0,0)
+        scene.collection.objects.link(obj);coll.objects.unlink(obj);roots.append(obj)
+    export(name)
 
 
 def venue_details():
-    for i in range(32):
-        a=i*2*pi/32; b=(i+1)*2*pi/32
-        for y,r in [(4.18,16.94),(8.8,16.94),(10.1,10.2)]:
-            bar("Canopy","steel",(r*cos(a),y,r*sin(a)),(r*cos(b),y,r*sin(b)),.085)
+    for i in range(64):
+        a=i*2*pi/64; b=(i+1)*2*pi/64
+        for y,r in [(14.3,40.8),(18.2,40.8),(15.1,21.0)]:
+            bar("Canopy","steel",(r*cos(a),y,r*sin(a)),(r*cos(b),y,r*sin(b)),.12)
         if i%2==0:
-            bar("Canopy","steel",(16.94*cos(a),4.18,16.94*sin(a)),(16.94*cos(a),8.8,16.94*sin(a)),.105)
-            bar("Canopy","steel",(16.94*cos(a),8.8,16.94*sin(a)),(7.2*cos(a),10.8,7.2*sin(a)),.10)
-        bar("Ribbon","strip",(15.1*cos(a),3.39,15.1*sin(a)),(15.1*cos(b),3.39,15.1*sin(b)),.055)
+            bar("Canopy","steel",(40.8*cos(a),13.6,40.8*sin(a)),(40.8*cos(a),18.2,40.8*sin(a)),.16)
+            bar("Canopy","steel",(40.8*cos(a),18.2,40.8*sin(a)),(12*cos(a),12.4,12*sin(a)),.115)
+        for y,r in [(6.48,27.6),(13.74,39.3)]:
+            bar("Ribbon","strip",(r*cos(a),y,r*sin(a)),(r*cos(b),y,r*sin(b)),.06)
     for x in (-1,1):
         bar("Frame","steel",(x*3.55,1.68,-8.28),(x*3.55,5.0,-8.28),.065)
     for i in range(4):
@@ -299,7 +219,7 @@ for i,h in enumerate((.4,.68,.96,1.23)):
     bar("Ring",col,(-3.24,h,-3.24),(3.24,h,-3.24),.025)
     for sign in (-1,1): bar("Ring",col,(sign*.85,h,3.24),(sign*3.24,h,3.24),.025)
     bar("Gate",col,(-.85,h,3.24),(.85,h,3.24),.025)
-box("Floor","night",0,-1.06,0,59,.32,59)
+box("Floor","night",0,-1.06,0,87,.32,87)
 box("Walkway","tread",0,-.12,9,2.7,.2,12)
 for sign in (-1,1):
     box("Tunnel","night",sign*1.6,1.36,11,.28,3.4,8)
@@ -310,12 +230,14 @@ for z in (7.25,9.3,11.35,13.4):
 for s in (-1,1):
     box("DoorL" if s<0 else "DoorR","steel",s*.73,1.41,7.0,1.46,2.84,.18)
     box("DoorL" if s<0 else "DoorR","strip",s*.08,1.41,7.11,.036,2.52,.03)
-for row in range(7):
-    r=8+row*1.28; h=-.6+row*.68
-    for sector in range(32):
-        a=sector*2*pi/32; b=(sector+1)*2*pi/32
-        if min(abs(a-pi/2),abs(b-pi/2))<.16: continue
-        geometry("Terraces","seats",[(d*cos(t),y,d*sin(t)) for d,y in [(r,h),(r+1.3,h),(r,h-.68)] for t in (a,b)],[(0,1,3,2),(0,4,5,1)])
+for row in range(20):
+    upper=row>=10
+    r=16+row*1.14+(1.5 if upper else 0); h=-.50+row*.64+(1.45 if upper else 0)
+    for sector in range(64):
+        a=sector*2*pi/64; b=(sector+1)*2*pi/64
+        if row<10 and sin((a+b)/2)>.97:continue
+        height=2.09 if row==10 else .64
+        geometry("Terraces","seats",[(d*cos(t),y,d*sin(t)) for d,y in [(r,h),(r+1.15,h),(r,h-height)] for t in (a,b)],[(0,1,3,2),(0,4,5,1)])
 for i in range(24):
     a=i*2*pi/24;b=(i+1)*2*pi/24
     for y in (7.3,7.67):
@@ -338,8 +260,8 @@ for name, objects in exports.items():
         obj.hide_set(False)
         collection.objects.link(obj)
         scene.collection.objects.unlink(obj)
-        if name=="referee": obj.location=(1.65,1.1,0)
-        elif name=="opponent": obj.location=(0,.45,0)
+        if name=="referee" and not obj.parent: obj.location=(1.65,1.1,0)
+        elif name=="opponent" and not obj.parent: obj.location=(0,.45,0)
         elif name=="belt": obj.location=(1.1,-1.0,1.1)
         elif name=="glove": obj.location=(-.5,-1.1,1.15)
         elif name=="spectator": obj.location=(8.4,0,-.58)

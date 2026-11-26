@@ -11,7 +11,7 @@ const lessons=[
   [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá dar unos pasos por el túnel']],
   [['Clic izquierdo','Probá lanzar un golpe al aire'],['Gatillo','Probá un golpe al aire con cualquiera de los mandos']],
   [['Espacio','Mantenelo apretado para subir la guardia'],['Agarre','Mantenelo apretado o acercá los guantes a la cara']],
-  [['P','Pausá la partida cuando lo necesites'],['Stick derecho','Movelo hacia un costado para girar por pasos']]
+  [['P','Pausá la partida cuando lo necesites'],['Esquivá con el cuerpo','Cuando el rival cargue el golpe, inclinate o agachate']]
 ];
 const invitation=lessons.length*lessonTime;
 const beltRise=t=>smooth((t-1.5)/2.8);
@@ -19,11 +19,13 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=n=>{n=clamp(n,0,1);return n*n*(3-2*n);};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
+let dodges=0,lockedCycle=-1;
+let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
 let hits=0,blocks=0,attempt=-1,lastPunch=-1,activeHand=0,lastCard=-1,noticeUntil=0,finStep=-1;
 let attacks=[-10,-10], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
 let head,forward,target,handPos,prevHands,velocity,headOrientation;
 const guide='WASD para moverte, mouse para mirar, clic izquierdo para golpear y espacio para bloquear. P pausa la partida. Si el navegador libera el mouse, hacé clic en el ring para recuperarlo.';
-const vrGuide='En VR, mirá alrededor y usá el stick izquierdo para moverte. El derecho gira por pasos. Golpeá acercando un guante al rival o usá el gatillo. Levantá ambos guantes o mantené el agarre para bloquear. Al terminar el tutorial podés acercarte al ring con el stick o usar el gatillo cuando aparezca la invitación.';
+const vrGuide='En VR, mirá alrededor y usá el stick izquierdo para moverte. El derecho gira por pasos. Golpeá acercando un guante al rival o usá el gatillo. Levantá ambos guantes o mantené el agarre para bloquear. Cuando el rival prepare un golpe, inclinate a un lado o agachate. Al terminar el tutorial podés acercarte al ring con el stick o usar el gatillo cuando aparezca la invitación.';
 function modal(title,body,buttons){
   const dialog=$('#modal');if(dialog.open)dialog.close();
   $('#modal-title').textContent=title;$('#modal-body').replaceChildren(...body);
@@ -43,14 +45,14 @@ $('#audio').onclick=()=>{sound.enabled=!sound.enabled;sound.volume();$('#audio')
 function lock(){if(!immersive&&w?.scene.canvas.requestPointerLock){try{w.scene.canvas.requestPointerLock()?.catch(()=>{});}catch{}}}
 function clearInput(){keys.clear();grips.clear();axis=[0,0];}
 function tell(text,seconds=2){$('#cue').textContent=text;noticeUntil=time+seconds;}
-function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   ·   Bloqueos '+blocks:'';}
+function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   ·   Bloqueos '+blocks+'   ·   Esquivas '+dodges:'';}
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   if(n===0){
-    hits=blocks=0;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
+    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
-    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.ref.position.set(1.58,0,-1.45);w.ref.rotation.y=-.45;w.ref.visible=true;w.refArm.rotation.z=0;
+    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.ref.position.set(1.58,0,-1.45);w.ref.rotation.y=-.45;w.ref.visible=true;w.refArm(0,true);
     w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   FINAL','The Price of Victory','Ingresá al ring');
     sound.ambience(.23);
   }else if(n===1){
@@ -93,11 +95,27 @@ function togglePause(){
 }
 $('#pause').onclick=togglePause;
 $('#modal').addEventListener('cancel',e=>{if(paused||finished){e.preventDefault();if(paused)togglePause();else{e.target.close();home();}}});
+function viewerPosition(out){
+  const eyes=immersive ? w.scene.renderer.xr.getCamera().cameras : null;
+  if(eyes?.length){
+    out.setFromMatrixPosition(eyes[0].matrixWorld);
+    if(eyes[1])out.lerp(otherEye.setFromMatrixPosition(eyes[1].matrixWorld),.5);
+  }else w.scene.camera.getWorldPosition(out);
+  return out;
+}
+function clearsStrike(position){
+  // Distance to the committed punch segment, including its finite reach.
+  strikeAxis.subVectors(strikeEnd,strikeStart);
+  relativeHead.subVectors(position,strikeStart);
+  const fraction=clamp(relativeHead.dot(strikeAxis)/Math.max(.001,strikeAxis.lengthSq()),0,1);
+  relativeHead.addScaledVector(strikeAxis,-fraction);
+  return relativeHead.lengthSq()>.18*.18;
+}
 function punch(i,physical=false){
   if(!running||paused||(stage!==1&&stage!==0)||time-lastPunch<.27)return;
   lastPunch=time;attacks[i]=time;activeHand=i;
   if(stage===0)return;
-  w.camera.object3D.getWorldPosition(head);w.opponent.getWorldPosition(target);target.y=head.y-.13;
+  viewerPosition(head);w.opponent.getWorldPosition(target);target.y=head.y-.13;
   w.scene.camera.getWorldDirection(forward);
   const range=target.distanceTo(head),aim=target.sub(head).normalize().dot(forward);
   if(physical||(range<1.7&&aim>.59)){
@@ -108,7 +126,7 @@ function punch(i,physical=false){
 function guard(){
   if(keys.has('Space')||grips.size)return true;
   if(!immersive)return false;
-  w.camera.object3D.getWorldPosition(head);
+  viewerPosition(head);
   return w.hands.every(hand=>{hand.object3D.getWorldPosition(handPos);return handPos.distanceTo(head)<.48&&handPos.y>head.y-.32;});
 }
 function move(dt){
@@ -153,20 +171,31 @@ function tick(dt){
     }
   }else if(stage===1){
     move(dt);
-    const p=w.rig.position,o=w.opponent.position;
+    const cycle=Math.floor(time/3.4),phase=time%3.4,i=cycle%2;
+    const p=viewerPosition(head),o=w.opponent.position;
     let dx=p.x-o.x,dz=p.z-o.z;const dist=Math.hypot(dx,dz)||.001;
-    const speed=clamp(dist-1.13,-.9,1.1)*dt;
-    o.x=clamp(o.x+dx/dist*speed+Math.cos(time*2.1)*dt*.16,-2.6,2.6);o.z=clamp(o.z+dz/dist*speed,-2.6,2.6);
-    w.opponent.rotation.y=Math.atan2(dx,dz);o.y=.025*Math.sin(time*5);
+    const committing=phase>=1.55&&phase<2.81;
+    const speed=committing?0:clamp(dist-1.13,-.9,1.1)*dt;
+    o.x=clamp(o.x+dx/dist*speed+(committing?0:Math.cos(time*2.1)*dt*.16),-2.6,2.6);o.z=clamp(o.z+dz/dist*speed,-2.6,2.6);
+    if(!committing||lockedCycle!==cycle)w.opponent.rotation.y=Math.atan2(dx,dz);o.y=.025*Math.sin(time*5);
     const reaction=clamp((time-lastHit)/.32,0,1);
     w.opponent.rotation.x=-.13*Math.sin(reaction*Math.PI);
-    const cycle=Math.floor(time/3.4),phase=time%3.4,i=cycle%2;
+    if(phase>=1.55&&lockedCycle!==cycle){
+      lockedCycle=cycle;
+      strikeStart.copy(o);strikeStart.y+=1.44;
+      strikeAxis.subVectors(head,strikeStart);
+      const reach=Math.min(1.56,strikeAxis.length());
+      strikeEnd.copy(strikeStart).addScaledVector(strikeAxis.normalize(),reach);
+    }
     const swing=phase>2.15&&phase<2.81?Math.sin((phase-2.15)/.66*Math.PI):0;
     const windup=phase>=1.55&&phase<2.15?Math.sin((phase-1.55)/.6*Math.PI):0;
-    w.fists.forEach((arm,n)=>{arm.rotation.x=n===i?windup*.31-swing*.9:0;arm.position.z=n===i?swing*.36-windup*.1:0;});
+    w.fists.forEach((arm,n)=>{
+      arm.upper(n===i ? windup*.22-swing*1.15 : .035*Math.sin(time*4));
+      arm.fore(n===i ? swing*1.87-windup*.26 : 0);
+    });
     if(phase>1.55&&phase<2.14)tell('El rival prepara un golpe',.32);
     if(phase>=2.48&&attempt!==cycle){attempt=cycle;
-      if(dist>1.7)tell('Esquivaste',.8);
+      if(clearsStrike(head)){dodges++;tell('Esquivaste',.8);}
       else if(blocked){blocks++;tell('Bloqueo',.8);sound.contact(true);}
       else{tell('El rival conecta',.8);sound.contact();}updateStats();
     }
@@ -179,12 +208,16 @@ function tick(dt){
       }
     }
     $('#clock').textContent='0:'+String(Math.max(0,Math.ceil(round-time))).padStart(2,'0');
-    const score=$('#clock').textContent+'   /   '+hits+' conectados   ·   '+blocks+' bloqueos';
-    if(immersive&&score!==boardState){w.display.set('ROUND 01','La gran final',score);boardState=score;}
+    const score=$('#clock').textContent+'   /   '+hits+' conectados   ·   '+blocks+' bloqueos   ·   '+dodges+' esquivas';
+    if(immersive){
+      const alert=phase>=1.55&&phase<2.15?'El rival carga el golpe':($('#cue').textContent==='Esquivaste'?'¡Esquivaste!':'La gran final');
+      const broadcast=alert+score;
+      if(broadcast!==boardState){w.display.set('ROUND 01',alert,score);boardState=broadcast;}
+    }
     if(time>=round)transition(2);
   }else if(stage===2||stage===3){
     if(stage===2){
-      w.refArm.rotation.z=-beltRise(time)*2.35;w.confetti.position.y=-((time*.45)%1.5);
+      w.refArm(-beltRise(time)*2.35,true);w.confetti.position.y=-((time*.45)%1.5);
       if(time>=8)transition(3);
     }else{
       if(time<4)w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',smooth((4-time)/.8),'question');
@@ -235,6 +268,7 @@ async function init(){
   // Keep a working cover and instructions even when the device cannot create WebGL.
   try{
     if(!T)throw Error('Falta el motor 3D.');
+    strikeStart=new T.Vector3();strikeEnd=new T.Vector3();strikeAxis=new T.Vector3();relativeHead=new T.Vector3();otherEye=new T.Vector3();
     head=new T.Vector3();forward=new T.Vector3();target=new T.Vector3();handPos=new T.Vector3();prevHands=[new T.Vector3(),new T.Vector3()];velocity=new T.Vector3();headOrientation=new T.Quaternion();
     [w]=await Promise.all([createWorld(tick),sound.prepare()]);bind();
     $('#start').disabled=false;$('#start span').textContent='Entrar al ring';
