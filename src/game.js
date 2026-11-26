@@ -51,8 +51,13 @@ function lock(){if(!immersive&&w?.scene.canvas.requestPointerLock){try{w.scene.c
 function clearInput(){keys.clear();grips.clear();axis=[0,0];}
 function tell(text,seconds=2){$('#cue').textContent=text;noticeUntil=time+seconds;}
 function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   ·   Bloqueos '+blocks+'   ·   Esquivas '+dodges:'';}
+function showVictoryQuestion(alpha){
+  w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',alpha,'question');
+}
 function transition(n){
-  stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
+  // The same question stays on screen across the blackout.
+  if(n!==3)w.card.hide();
+  stage=n;time=0;noticeUntil=0;$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   $('#hud').classList.toggle('closing',n===5);$('#end-actions').hidden=true;
   if(n===0){
     musicStarted=false;sound.stopScore();sound.setApplause(null);guardBlend=gripBlend=0;gestureReady=[false,false];
@@ -77,7 +82,6 @@ function transition(n){
   }else if(n===3){
     w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.confetti.visible=false;
     sound.setApplause(null);sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
-    w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
   }else if(n===5){
     w.scene.camera.getWorldDirection(forward);
@@ -316,10 +320,11 @@ function tick(dt){
   }else if(stage===2||stage===3){
     if(stage===2){
       w.ceremony.tick(time);w.confetti.position.y=-((time*.45)%1.5);
+      if(time>=4.1)showVictoryQuestion(smooth((time-4.1)/.4));
       if(time>=8)transition(3);
     }else{
       w.ceremony.tick(time,true);
-      if(time<4)w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',smooth((4-time)/.8),'question');
+      if(time<4)showVictoryQuestion(smooth((4-time)/.8));
       else w.card.hide();
       if(time>=6.6&&!musicStarted){musicStarted=true;sound.startScore();}
       if(time>=11.5)transition(4);
