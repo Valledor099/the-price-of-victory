@@ -65,7 +65,7 @@ function transition(n){
     // Keep the presentation in front of the player's current heading.
     w.camera.object3D.getWorldDirection(forward);forward.negate();forward.y=0;forward.normalize();
     const side=new T.Vector3(-forward.z,0,forward.x);
-    w.ref.position.copy(w.rig.position).addScaledVector(forward,.81).addScaledVector(side,.54);
+    w.ref.position.copy(w.rig.position).addScaledVector(forward,1.20).addScaledVector(side,.72);
     w.ref.rotation.y=Math.atan2(-forward.x,-forward.z);
     tell('El árbitro te entrega el cinturón',3);
   }else if(n===3){
@@ -146,7 +146,7 @@ function tick(dt){
     w.desk[i].visible=!immersive;w.xr[i].visible=immersive;
     const sign=i===0?-1:1,age=time-attacks[i],extend=stage<=1&&age>=0&&age<.32?Math.sin(age/.32*Math.PI):0;
     const lift=stage===2 ? beltRise(time) : 0;
-    w.desk[i].position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0)+lift*.40,-.44-.43*extend-lift*.23);
+    w.desk[i].position.set(sign*((blocked?.13:.245)+lift*.105),-.29+(blocked?.18:0)+lift*.40,-.44-.43*extend-lift*.36);
     w.desk[i].rotation.x=-.43-.49*extend;w.xr[i].rotation.x=-.8;
   }
   if(stage===0){

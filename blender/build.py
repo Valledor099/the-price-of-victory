@@ -3,6 +3,7 @@ from pathlib import Path
 from math import sin, cos, pi, sqrt
 import bpy
 import bmesh
+import runpy
 from mathutils import Vector
 
 OUT = Path(__file__).resolve().parents[1] / "assets"
@@ -199,11 +200,8 @@ def fan_details():
 
 human(); human(True)
 glove("Hand",0,0,0,"inkhide"); export("glove")
-loft("Belt","leather",[(0,-.097,0,.325,.159),(0,.10,0,.325,.159)],32)
-for x,width in [(0,.172),(-.231,.071),(.231,.071)]:
-    oval("Belt","gold",x,0,.135,width,width*.81,.045,12)
-    oval("Belt","edge",x,0,.171,width*.79,width*.65,.019,12)
-    oval("Belt","gold",x,0,.19,width*.53,width*.47,.009,8)
+belt_module = runpy.run_path(str(Path(__file__).with_name("belt.py")))
+belt_module["championship_belt"](geometry, scene)
 export("belt")
 
 # Boxing canvas at world height zero. The front ropes have an entrance gate.
