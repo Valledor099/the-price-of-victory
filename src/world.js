@@ -1,7 +1,7 @@
 import {playerArms} from './strikes.js';
 import {victoryCeremony} from './ceremony.js';
 import {boards} from './boards.js';
-import {centerCard,photographers} from './presentation.js';
+import {centerCard,photographers,closingCredits} from './presentation.js';
 import {crowdFromStands} from './stands.js';
 const T=AFRAME.THREE;
 function entity(tag,parent,attrs={}) {
@@ -79,15 +79,14 @@ export async function createWorld(tick) {
   for(let i=0;i<120;i++){const a=i*2.39996,r=1.5+(i%17)*.30;stars.set([Math.cos(a)*r,2+(i%19)*.17,Math.sin(a)*r],i*3);}
   const geo=new T.BufferGeometry();geo.setAttribute('position',new T.BufferAttribute(stars,3));
   const confetti=new T.Points(geo,new T.PointsMaterial({color:0xf8d785,size:.045}));world.add(confetti);confetti.visible=false;
-  const badge=new T.Mesh(new T.PlaneGeometry(1.85,.52),new T.MeshBasicMaterial({map:await new T.TextureLoader().loadAsync('assets/fairplay.png'),transparent:true,depthWrite:false}));
-  badge.material.map.colorSpace=T.SRGBColorSpace;world.add(badge);badge.visible=false;
+  const credits=await closingCredits(scene.camera);
   const lamps=arena.getObjectByName('Lamps'),emissive=new Map();
   arena.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat()){
     if(m.emissive?.getHex())emissive.set(m,m.emissiveIntensity);
   }});
   const lightColor=new T.Color(),warm=new T.Color('#fff0d6'),cold=new T.Color('#809cae');
   const skyA=new T.Color('#172324'),skyB=new T.Color('#030609');
-  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,impactTarget,ceremony,animateBoxer,poseArms,belt,crowd,display,confetti,badge,card,flashes,
+  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,impactTarget,ceremony,animateBoxer,poseArms,belt,crowd,display,confetti,credits,card,flashes,
     gate:arena.getObjectByName('Gate'),doors:[arena.getObjectByName('DoorL'),arena.getObjectByName('DoorR')],
     light(mix){key.intensity=2.8*(1-mix);ambient.intensity=2.1*(1-mix)+.035*mix;rim.intensity=1.9*(1-mix);
       ambient.color.copy(lightColor.copy(warm).lerp(cold,mix));world.background?.copy(skyA).lerp(skyB,mix);if(world.fog)world.fog.color.copy(world.background);

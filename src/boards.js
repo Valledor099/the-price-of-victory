@@ -16,13 +16,14 @@ export async function boards(world) {
   const c=canvas.getContext('2d'),tex=new T.CanvasTexture(canvas);
   tex.colorSpace=T.SRGBColorSpace;
   const group=new T.Group();group.name='Marcadores';
-  const front=new T.MeshBasicMaterial({map:tex,toneMapped:false});
+  const faces=[];
   const housing=new T.MeshBasicMaterial({color:0x192526});
   const emitters=[],white=new T.Color('#d6e5ef'),tint=new T.Color();
   const sample=document.createElement('canvas');sample.width=sample.height=1;
   const sampler=sample.getContext('2d',{willReadFrequently:true});
   for(let n=0;n<4;n++){
     const a=n*Math.PI/2;
+    const front=new T.MeshBasicMaterial({map:tex,toneMapped:false});faces.push(front);
     const screen=new T.Mesh(new T.BoxGeometry(7.1,3.06,.13),[housing,housing,housing,housing,front,housing]);
     // South board hangs above the 3.16 m tunnel roof, on shorter hangers.
     screen.position.set(Math.sin(a)*8.2,n===2?5.02:3.32,-Math.cos(a)*8.2);
@@ -31,8 +32,42 @@ export async function boards(world) {
     spill.position.set(0,-.18,.52);screen.add(spill);emitters.push(spill);
   }
   world.add(group);
-  let brightness=7;
+  // A lit tube behind the last picture leaves a little light on the canvas of the ring.
+  const phosphor=new T.Mesh(new T.PlaneGeometry(7.1,3.06),new T.MeshBasicMaterial({
+    color:0x849490,transparent:true,opacity:0,depthWrite:false,toneMapped:false
+  }));
+  phosphor.position.z=.068;phosphor.visible=false;
+  const direction=new T.Vector3();
+  let brightness=7,order=[];
+  function power(index,picture,light){
+    faces[index].color.setScalar(picture);
+    group.children[index].visible=picture>0||light>0;
+    emitters[index].intensity=light*brightness;emitters[index].visible=light>0;
+  }
   return {
+    reset(){
+      phosphor.removeFromParent();phosphor.visible=false;
+      for(let i=0;i<faces.length;i++)power(i,1,0);
+    },
+    beginShutdown(eye,forward){
+      let last=0,best=-Infinity;
+      group.children.forEach((screen,i)=>{
+        const alignment=direction.subVectors(screen.position,eye).normalize().dot(forward);
+        if(alignment>best){best=alignment;last=i;}
+      });
+      order=[(last+2)%4,(last+1)%4,(last+3)%4,last];
+      group.children[last].add(phosphor);phosphor.visible=true;phosphor.material.opacity=0;
+    },
+    shutdown(time,lastLight){
+      for(let i=0;i<3;i++){
+        const level=1-T.MathUtils.smoothstep(time,.10+i*.80,.82+i*.80);
+        power(order[i],level,level);
+      }
+      const afterglow=T.MathUtils.smoothstep(time,1.85,3);
+      power(order[3],(1-afterglow)*lastLight,(1-.50*afterglow)*lastLight);
+      phosphor.material.opacity=afterglow*.32*lastLight;
+      group.visible=lastLight>0;
+    },
     glow(level){for(const light of emitters){light.intensity=level*brightness;light.visible=level>0;}},
     set(label,headline,sub='',card=null) {
       group.visible=true;

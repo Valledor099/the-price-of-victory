@@ -22,7 +22,7 @@ let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
 let entranceApplauded=false;
 let dodges=0,lockedCycle=-1;
 let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
-let hits=0,blocks=0,attempt=-1,lastPunch=-1,lastCard=-1,noticeUntil=0,finStep=-1;
+let hits=0,blocks=0,attempt=-1,lastPunch=-1,lastCard=-1,noticeUntil=0;
 let attacks=[null,null],lastType='jab',musicStarted=false,gestureReady=[false,false], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
 let head,forward,target,handPos,prevHands,velocity,headOrientation,offset,authoredQ,controllerQ,localHand;
 let guardBlend=0,gripBlend=0,knuckle,delta;
@@ -53,14 +53,15 @@ function tell(text,seconds=2){$('#cue').textContent=text;noticeUntil=time+second
 function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   ·   Bloqueos '+blocks+'   ·   Esquivas '+dodges:'';}
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
+  $('#hud').classList.toggle('closing',n===5);$('#end-actions').hidden=true;
   if(n===0){
     musicStarted=false;sound.stopScore();sound.setApplause(null);guardBlend=gripBlend=0;gestureReady=[false,false];
-    entranceApplauded=false;w.display.glow(0);w.card.darken(0);
-    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;finStep=-1;
+    entranceApplauded=false;w.display.reset();w.card.darken(0);
+    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
     w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.opponent.rotation.set(0,0,0);w.ceremony.reset();
-    w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   CAMPEONATO MUNDIAL','El precio de la victoria','Dos esquinas. Un cinturón en juego.');
+    w.belt.visible=false;w.credits.reset();w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   CAMPEONATO MUNDIAL','El precio de la victoria','Dos esquinas. Un cinturón en juego.');
     sound.ambience(.23);
   }else if(n===1){
     if(!entranceApplauded){sound.setApplause('entry');entranceApplauded=true;}
@@ -78,7 +79,11 @@ function transition(n){
     sound.setApplause(null);sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
     w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
-  }else if(n===5){w.display.off();finStep=-1;}
+  }else if(n===5){
+    w.scene.camera.getWorldDirection(forward);
+    w.display.beginShutdown(viewerPosition(head),forward);
+    sound.closeScore(9.15);
+  }
 }
 function begin(){
   $('#modal').close();$('#lobby').hidden=true;$('#hud').hidden=false;paused=false;running=true;
@@ -86,10 +91,13 @@ function begin(){
 }
 function finish(){
   sound.stopScore();finished=true;running=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();
-  if(immersive){w.display.set('FAIR PLAY','El precio de la victoria','Gatillo para volver a jugar');return;}
+  if(immersive){w.credits.offerReplay();return;}
+  w.credits.reset();$('#end-actions').hidden=false;$('#replay').focus({preventScroll:true});
+}
+function showSources(){
   const list=document.createElement('ul');
   for(const c of archive){const li=document.createElement('li'),a=document.createElement('a');a.href=c.url;a.target='_blank';a.rel='noopener';a.textContent=c.title+' · '+c.source;li.append(a,document.createTextNode(' — '+c.body));list.append(li);}
-  modal('¿Qué quedó fuera de cámara?',[paragraph('El sportswashing usa el prestigio del deporte para mejorar una imagen pública. Estas investigaciones documentan los casos que viste en el estadio.'),list],[['Volver a jugar',begin],['Ir a portada',home]]);
+  modal('¿Qué quedó fuera de cámara?',[paragraph('El sportswashing usa el prestigio del deporte para mejorar una imagen pública. Estas investigaciones documentan los casos que viste en el estadio.'),list],[['Volver',()=>$('#sources').focus()]]);
 }
 function home(){sound.setApplause(null);sound.stopScore();running=false;finished=false;paused=false;sound.ambience(0);$('#hud').hidden=true;$('#lobby').hidden=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();}
 function togglePause(){
@@ -99,7 +107,7 @@ function togglePause(){
   modal('Pausa',[paragraph(guide),volumeControl()],[['Seguir jugando',togglePause],['Ir a portada',home]]);
 }
 $('#pause').onclick=togglePause;
-$('#modal').addEventListener('cancel',e=>{if(paused||finished){e.preventDefault();if(paused)togglePause();else{e.target.close();home();}}});
+$('#modal').addEventListener('cancel',e=>{if(paused||finished){e.preventDefault();if(paused)togglePause();else{e.target.close();$('#sources').focus();}}});
 function viewerPosition(out){
   const eyes=immersive ? w.scene.renderer.xr.getCamera().cameras : null;
   if(eyes?.length){
@@ -172,7 +180,7 @@ function tick(dt){
   gripBlend+=((blocked&&grips.size?1:0)-gripBlend)*blend;
   w.scene.camera.getWorldQuaternion(headOrientation);
   for(let i=0;i<2;i++){
-    const tracked=stage!==2&&!(stage===3&&time<.85);
+    const tracked=stage!==5&&stage!==2&&!(stage===3&&time<.85);
     w.desk[i].visible=!immersive&&tracked;w.xr[i].visible=immersive&&tracked;
     const sign=i===0?-1:1,a=attacks[i],age=a?time-a.start:-1;
     const animated=stage<=1&&a&&!a.physical;
@@ -322,13 +330,13 @@ function tick(dt){
     const i=Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
     if(i!==lastCard){if(i===0)sound.screensOn();const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
   }else if(stage===5){
-    if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','El precio de la victoria');w.display.glow(.65);w.badge.visible=true;}
-    if(time>=9)finish();
-  }
-  if(w.badge.visible){
-    viewerPosition(head);w.scene.camera.getWorldQuaternion(headOrientation);
-    w.badge.position.copy(head).add(target.set(0,.17,-2.7).applyQuaternion(headOrientation));
-    w.badge.quaternion.copy(headOrientation);
+    const lastLight=1-smooth((time-7.3)/1.5);
+    const ink=1-smooth((time-7.85)/1.05);
+    w.display.shutdown(time,lastLight);
+    w.card.darken(.32*smooth(time/2.7)+.68*(1-lastLight),true);
+    w.credits.show(smooth((time-2.65)/.95)*ink,smooth((time-4.25)/1.2),smooth((time-5.48)/.95)*ink,immersive);
+    if(time>=5.48&&!$('#spoken').textContent)$('#spoken').textContent='Fair Play. El precio de la victoria.';
+    if(time>=10)finish();
   }
 }
 function bind(){
@@ -348,7 +356,7 @@ function bind(){
     h.addEventListener('thumbstickmoved',e=>{const {x,y}=e.detail;if(!i)axis=[Math.abs(x)>.16?x:0,Math.abs(y)>.16?y:0];else if(Math.abs(x)<.3)snapReady=true;else if(Math.abs(x)>.75&&snapReady){w.rig.rotation.y-=Math.sign(x)*Math.PI/6;snapReady=false;}});
   });
   w.scene.addEventListener('exit-vr',()=>{immersive=false;clearInput();if(finished)finish();else if(running&&!paused)togglePause();});
-  $('#start').onclick=begin;
+  $('#start').onclick=begin;$('#replay').onclick=begin;$('#sources').onclick=showSources;$('#to-cover').onclick=home;
   $('#vr').onclick=async()=>{try{await w.scene.enterVR();immersive=!!w.scene.renderer.xr.isPresenting;if(!immersive)throw Error();begin();}catch{modal('El casco no inició la sesión',[paragraph('Comprobá la conexión del visor y el permiso de realidad virtual del navegador.')],[['Entendido']]);}};
 }
 async function init(){

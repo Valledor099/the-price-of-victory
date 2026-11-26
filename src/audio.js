@@ -128,22 +128,35 @@ export class Sound {
     this.applause={sources,gain,start:now,level};
   }
 
-  startScore(){
+  startScore(offset=0){
     if(!this.score||this.music)return;
     const ctx=this.ctx,source=ctx.createBufferSource(),gain=ctx.createGain();
     source.buffer=this.score;
+    // Hold the eight-second phrase before the coda if rendering the news takes longer.
+    source.loop=offset===0;source.loopStart=32;source.loopEnd=40;
     gain.gain.setValueAtTime(0,ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(.57,ctx.currentTime+1.8);
+    gain.gain.linearRampToValueAtTime(.57,ctx.currentTime+(offset ? .40 : 1.8));
     source.connect(gain).connect(this.bus);
-    this.music={source,gain};
+    this.music={source,gain,start:ctx.currentTime};
     source.onended=()=>{source.disconnect();gain.disconnect();if(this.music?.source===source)this.music=null;};
-    source.start();
+    source.start(0,offset);
   }
-  stopScore(){
+  closeScore(duration){
+    if(!this.score)return;
+    const offset=Math.max(0,this.score.duration-duration);
+    if(this.music){
+      const elapsed=this.ctx.currentTime-this.music.start;
+      const phase=elapsed<40?elapsed:32+(elapsed-32)%8;
+      if(Math.abs(phase-offset)<.4){this.music.source.loop=false;return;}
+      this.stopScore(.4);
+    }
+    this.startScore(offset);
+  }
+  stopScore(fade=.24){
     if(!this.music)return;
     const {source,gain}=this.music,now=this.ctx.currentTime;
-    this.music=null;gain.gain.cancelScheduledValues(now);gain.gain.setTargetAtTime(0,now,.045);
-    source.stop(now+.24);
+    this.music=null;gain.gain.cancelScheduledValues(now);gain.gain.setTargetAtTime(0,now,fade/5);
+    source.stop(now+fade);
   }
 
   screensOn() {

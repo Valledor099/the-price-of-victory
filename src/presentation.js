@@ -16,7 +16,7 @@ export function centerCard(camera) {
   shade.name='Oscuridad del estadio';shade.visible=false;shade.renderOrder=24;camera.add(shade);
   let last='';
   return {
-    darken(alpha){shade.material.opacity=alpha;shade.visible=alpha>.001;},
+    darken(alpha,black=false){shade.material.color.setHex(black?0x000000:0x030606);shade.material.opacity=alpha;shade.visible=alpha>.001;},
     show(key,action,alpha=1,style='lesson') {
       if(key!==last){
         last=key;panel.userData.cue=key;
@@ -44,6 +44,44 @@ export function centerCard(camera) {
       mat.opacity=Math.min(1,Math.max(0,alpha));panel.visible=mat.opacity>.015;
     },
     hide(){if(!last)return;panel.visible=false;last='';delete panel.userData.cue;document.querySelector('#spoken').textContent='';}
+  };
+}
+
+export async function closingCredits(camera){
+  const [logo]=await Promise.all([
+    new T.TextureLoader().loadAsync('assets/fairplay.png'),
+    document.fonts.load('500 96px "Playfair Display"')
+  ]);
+  const group=new T.Group();group.name='Cierre Fair Play';group.position.z=-2.7;camera.add(group);
+  function surface(map,width,height,name){
+    map.colorSpace=T.SRGBColorSpace;
+    const mat=new T.MeshBasicMaterial({map,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,fog:false});
+    const mesh=new T.Mesh(new T.PlaneGeometry(width,height),mat);
+    mesh.name=name;mesh.renderOrder=26;group.add(mesh);return mesh;
+  }
+  function lettering(text,font,color,width){
+    const canvas=document.createElement('canvas');canvas.width=1536;canvas.height=216;
+    const ctx=canvas.getContext('2d');ctx.font=font;ctx.fillStyle=color;ctx.textAlign='center';
+    ctx.textBaseline='middle';ctx.fillText(text,768,108,1480);
+    return surface(new T.CanvasTexture(canvas),width,width*216/1536,text);
+  }
+  const badge=surface(logo,1.85,.52,'Logo Fair Play');
+  const title=lettering('El precio de la victoria','500 140px "Playfair Display"','#708D81',2.32);
+  const replay=lettering('Gatillo para volver a jugar','72px Arial','#9fafaa',1.5);
+  title.position.y=-.17;replay.position.y=-.62;
+  function opacity(mesh,value){mesh.material.opacity=value;mesh.visible=value>.001;}
+  function reset(){group.visible=false;for(const mesh of group.children)opacity(mesh,0);}
+  reset();
+  return {
+    reset,
+    show(logoAlpha,rise,titleAlpha,immersive){
+      group.visible=true;
+      // Leave room on a narrow desktop or phone viewport. Both eyes share the same size in VR.
+      group.scale.setScalar(immersive?1:Math.min(1,2*2.7*Math.tan(camera.fov*Math.PI/360)*camera.aspect*.9/2.32));
+      badge.position.y=.06+.27*rise;
+      opacity(badge,logoAlpha);opacity(title,titleAlpha);
+    },
+    offerReplay(){group.visible=true;opacity(replay,.65);}
   };
 }
 
