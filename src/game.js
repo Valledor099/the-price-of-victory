@@ -1,6 +1,6 @@
 import {createWorld} from './world.js';
 import {archive} from './archive.js';
-import {strikes,glovePose} from './strikes.js';
+import {strikes,glovePose,animatedWrist,trackedWrist} from './strikes.js';
 import {Sound} from './audio.js';
 
 const $=s=>document.querySelector(s), T=globalThis.AFRAME?.THREE;
@@ -24,8 +24,8 @@ let dodges=0,lockedCycle=-1;
 let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
 let hits=0,blocks=0,attempt=-1,lastPunch=-1,lastCard=-1,noticeUntil=0,finStep=-1;
 let attacks=[null,null],lastType='jab',musicStarted=false,gestureReady=[false,false], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
-let head,forward,target,handPos,prevHands,velocity,headOrientation,offset,angles,controllerQ,localHand;
-let lastRally=-20,knuckle,delta;
+let head,forward,target,handPos,prevHands,velocity,headOrientation,offset,authoredQ,controllerQ,localHand;
+let guardBlend=0,gripBlend=0,knuckle,delta;
 function facePoint(i,out){
   out.set(i?.035:-.035,.097,.105);return w.impactTarget.localToWorld(out);
 }
@@ -54,7 +54,7 @@ function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   if(n===0){
-    musicStarted=false;sound.stopScore();lastRally=-20;gestureReady=[false,false];
+    musicStarted=false;sound.stopScore();sound.setApplause(null);guardBlend=gripBlend=0;gestureReady=[false,false];
     entranceApplauded=false;w.display.glow(0);w.card.darken(0);
     hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
@@ -63,19 +63,19 @@ function transition(n){
     w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   CAMPEONATO MUNDIAL','El precio de la victoria','Dos esquinas. Un cinturón en juego.');
     sound.ambience(.23);
   }else if(n===1){
-    if(!entranceApplauded){sound.applaud();entranceApplauded=true;}
+    if(!entranceApplauded){sound.setApplause('entry');entranceApplauded=true;}
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5);
     w.rig.position.set(0,0,1.05);w.opponent.position.set(0,0,-.2);w.gate.visible=true;
     lastPunch=-1;attacks=[null,null];sound.ambience(.41);sound.bell();w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL','El cinturón está en juego','Jab · Uppercut · Bloqueo');
     tell('Round final por el título mundial',3);
   }else if(n===2){
-    w.display.set('DECISIÓN DEL JURADO','¡Campeón del mundo!','El cinturón mundial es tuyo');sound.bell();sound.ambience(.44);sound.applaud('title');
+    w.display.set('DECISIÓN DEL JURADO','¡Campeón del mundo!','El cinturón mundial es tuyo');sound.bell();sound.ambience(.44);sound.setApplause('title');
     w.opponent.visible=false;w.confetti.visible=!reduced;w.belt.visible=true;
     w.scene.camera.getWorldDirection(forward);w.ceremony.start(viewerPosition(head),forward);
     tell('Levantás el cinturón de campeón',3);
   }else if(n===3){
     w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.confetti.visible=false;
-    sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
+    sound.setApplause(null);sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
     w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
   }else if(n===5){w.display.off();finStep=-1;}
@@ -91,7 +91,7 @@ function finish(){
   for(const c of archive){const li=document.createElement('li'),a=document.createElement('a');a.href=c.url;a.target='_blank';a.rel='noopener';a.textContent=c.title+' · '+c.source;li.append(a,document.createTextNode(' — '+c.body));list.append(li);}
   modal('¿Qué quedó fuera de cámara?',[paragraph('El sportswashing usa el prestigio del deporte para mejorar una imagen pública. Estas investigaciones documentan los casos que viste en el estadio.'),list],[['Volver a jugar',begin],['Ir a portada',home]]);
 }
-function home(){sound.stopScore();running=false;finished=false;paused=false;sound.ambience(0);$('#hud').hidden=true;$('#lobby').hidden=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();}
+function home(){sound.setApplause(null);sound.stopScore();running=false;finished=false;paused=false;sound.ambience(0);$('#hud').hidden=true;$('#lobby').hidden=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();}
 function togglePause(){
   if(!running||immersive)return;
   if(paused){paused=false;$('#modal').close();sound.ctx?.resume();lock();return;}
@@ -127,8 +127,7 @@ function connect(i,kind,physical,contactDistance=0){
   hits++;lastHit=time;lastType=kind;
   const phase=time%3.4;
   if(phase>=1.55&&phase<2.48)attempt=Math.floor(time/3.4);
-  sound.contact(false,kind);tell(kind==='jab'?'Jab conectado':'Uppercut conectado',.85);updateStats();
-  if(hits%3===0&&time-lastRally>4){sound.applaud('rally');lastRally=time;}
+  sound.contact(false,kind);updateStats();
   w.hands[i].components['tracked-controls']?.controller?.gamepad?.hapticActuators?.[0]?.pulse(kind==='jab'?.22:.37,65);
 }
 function punch(i,kind,physical=false){
@@ -164,10 +163,14 @@ function tick(dt){
   time+=dt;if(time>noticeUntil)$('#cue').textContent='';
   w.flashes.tick(dt,stage,reduced);
   if(stage<=2&&!reduced){
-    const energy=stage===2?1:stage===1?Math.max(.16,(time>round-10?.70:0),1-clamp((time-lastRally)/2.4,0,1)):entranceApplauded?.8:0;
+    const energy=stage===2?1:stage===1?Math.max(.16,(time>round-10?.70:0),1-clamp((time-lastHit)/1.1,0,1)):entranceApplauded?.8:0;
     w.crowd.userData.animate(dt,energy);
   }
   const blocked=stage<=1&&guard();
+  const blend=1-Math.exp(-dt*16);
+  guardBlend+=((blocked?1:0)-guardBlend)*blend;
+  gripBlend+=((blocked&&grips.size?1:0)-gripBlend)*blend;
+  w.scene.camera.getWorldQuaternion(headOrientation);
   for(let i=0;i<2;i++){
     const tracked=stage!==2&&!(stage===3&&time<.85);
     w.desk[i].visible=!immersive&&tracked;w.xr[i].visible=immersive&&tracked;
@@ -175,16 +178,22 @@ function tick(dt){
     const animated=stage<=1&&a&&!a.physical;
     const arrives=stage===1&&a&&!a.resolved&&age>=strikes[a.kind].contact;
     const poseAge=arrives?strikes[a.kind].contact:age;
-    glovePose(a?.kind||'jab',animated?poseAge:-1,offset,angles);
+    const kind=a?.kind||'jab',turn=glovePose(kind,animated?poseAge:-1,offset);
     offset.x*=sign;
     const desk=w.desk[i],xr=w.xr[i];
-    desk.position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0),-.44).add(offset);
-    desk.rotation.set(-.43+angles.x,sign*angles.y,sign*-.14);
-    xr.position.set(0,0,0);xr.rotation.set(-.8+angles.x,sign*angles.y,sign*-.14);
-    if(immersive&&animated){
-      w.scene.camera.getWorldQuaternion(headOrientation);
-      w.hands[i].object3D.getWorldQuaternion(controllerQ);
-      xr.position.copy(offset).multiplyScalar(.67).applyQuaternion(headOrientation).applyQuaternion(controllerQ.invert());
+    desk.position.set(sign*(.235-.064*guardBlend),-.255+.164*guardBlend,-.407+.071*guardBlend).add(offset);
+    animatedWrist(desk.quaternion,desk.position,sign,guardBlend,kind,turn);
+    if(immersive){
+      const controller=w.hands[i].object3D;
+      controller.getWorldQuaternion(controllerQ).invert();
+      xr.position.copy(offset).multiplyScalar(.67).applyQuaternion(headOrientation).applyQuaternion(controllerQ);
+      trackedWrist(xr.quaternion,sign);
+      if(gripBlend>.001){
+        w.camera.object3D.localToWorld(localHand.copy(desk.position));
+        xr.position.lerp(controller.worldToLocal(localHand),gripBlend);
+      }
+      authoredQ.copy(controllerQ).multiply(headOrientation).multiply(desk.quaternion);
+      xr.quaternion.slerp(authoredQ,Math.max(turn,gripBlend));
     }
     const hand=immersive?xr:desk;
     if(animated&&a.goal&&poseAge<strikes[a.kind].keys.at(-1)[0]){
@@ -194,13 +203,13 @@ function tick(dt){
       hand.parent.worldToLocal(knuckle);
       hand.parent.worldToLocal(delta.copy(a.goal)).sub(knuckle).clampLength(0,immersive?.80:.55);
       hand.position.addScaledVector(delta,weight);
+      if(!immersive)animatedWrist(hand.quaternion,hand.position,sign,guardBlend,kind,turn);
     }
     if(arrives){
       a.resolved=true;hand.localToWorld(knuckle.set(0,.12,.012));
       connect(i,a.kind,false,knuckle.distanceTo(facePoint(i,target)));
     }
   }
-  w.scene.camera.getWorldQuaternion(headOrientation);
   w.poseArms(stage<=1,viewerPosition(head),headOrientation,immersive?w.xr:w.desk);
   if(stage===0){
     w.animateBoxer(dt,time%8>6.6?'Weave':'GuardFootwork',.86);
@@ -208,7 +217,7 @@ function tick(dt){
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5*opening);
     move(dt);
     if(time>=invitation&&!entranceApplauded&&w.rig.position.z<6.75){
-      sound.applaud();entranceApplauded=true;
+      sound.setApplause('entry');entranceApplauded=true;
       w.display.set('EN VIVO   /   PRESENTACIÓN','¡Entra el aspirante!','Final por el campeonato mundial de boxeo');
     }
     if(time<invitation){
@@ -229,6 +238,7 @@ function tick(dt){
     }
   }else if(stage===1){
     move(dt);
+    if(time>=.85&&entranceApplauded){sound.setApplause(null,.65);entranceApplauded=false;}
     const cycle=Math.floor(time/3.4),phase=time%3.4;
     const p=viewerPosition(head),o=w.opponent.position;
     let dx=p.x-o.x,dz=p.z-o.z;const dist=Math.hypot(dx,dz)||.001;
@@ -288,13 +298,12 @@ function tick(dt){
       }
     }
     $('#clock').textContent='0:'+String(Math.max(0,Math.ceil(round-time))).padStart(2,'0');
-    const score=$('#clock').textContent+'   /   '+hits+' conectados   ·   '+blocks+' bloqueos   ·   '+dodges+' esquivas';
-    {
-      const alert=hitAge<.75?(lastType==='jab'?'Jab conectado':'Uppercut conectado'):time>=round-10?'Últimos diez segundos':immersive&&phase>=1.55&&phase<2.15?'El rival carga el golpe':'Campeonato mundial';
-      const broadcast=alert+score;
-      if(broadcast!==boardState){w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL',alert,score);boardState=broadcast;}
+    const clock=$('#clock').textContent;
+    if(clock!==boardState){
+      w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL',time>=round-10?'Últimos diez segundos':'Campeonato mundial',clock);
+      boardState=clock;
     }
-    if(time>=round-10&&time-dt<round-10){sound.applaud('rally');tell('¡Diez segundos!',1);}
+    if(time>=round-10&&time-dt<round-10)tell('¡Diez segundos!',1);
     if(time>=round)transition(2);
   }else if(stage===2||stage===3){
     if(stage===2){
@@ -346,7 +355,7 @@ async function init(){
   // Keep a working cover and instructions even when the device cannot create WebGL.
   try{
     if(!T)throw Error('Falta el motor 3D.');
-    knuckle=new T.Vector3();delta=new T.Vector3();offset=new T.Vector3();angles=new T.Vector2();controllerQ=new T.Quaternion();localHand=new T.Vector3();
+    knuckle=new T.Vector3();delta=new T.Vector3();offset=new T.Vector3();authoredQ=new T.Quaternion();controllerQ=new T.Quaternion();localHand=new T.Vector3();
     strikeStart=new T.Vector3();strikeEnd=new T.Vector3();strikeAxis=new T.Vector3();relativeHead=new T.Vector3();otherEye=new T.Vector3();
     head=new T.Vector3();forward=new T.Vector3();target=new T.Vector3();handPos=new T.Vector3();prevHands=[new T.Vector3(),new T.Vector3()];velocity=new T.Vector3();headOrientation=new T.Quaternion();
     [w]=await Promise.all([createWorld(tick),sound.prepare()]);bind();

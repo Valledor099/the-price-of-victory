@@ -3,9 +3,10 @@ export class Sound {
   enabled = true;
   level = 0.72;
   crowdLevel = 0;
+  applauseMoment = null;
 
   async prepare() {
-    const names = ['bell', 'murmur', 'applause', 'despues-de-la-campana'];
+    const names = ['bell', 'murmur', 'applause', 'despues-de-la-campana', 'televisor'];
     this.files = Object.fromEntries(await Promise.all(names.map(async name => {
       const response = await fetch('assets/' + name + '.mp3');
       if (!response.ok) throw Error('No se pudo cargar el sonido de ' + name);
@@ -23,8 +24,6 @@ export class Sound {
       this.master = ctx.createGain();
       this.master.gain.value = 0;
       this.bus.connect(limiter).connect(this.master).connect(ctx.destination);
-      this.applauseBus = ctx.createGain();
-      this.applauseBus.connect(this.bus);
       this.venue = ctx.createGain();
       this.venue.gain.value = 0;
       const distant = ctx.createBiquadFilter();
@@ -41,13 +40,25 @@ export class Sound {
 
   async loadSamples() {
     const ctx = this.ctx;
-    const [bell, murmur, applause, score] = await Promise.all(['bell','murmur','applause','despues-de-la-campana'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
+    const [bell, murmur, applause, score, television] = await Promise.all(['bell','murmur','applause','despues-de-la-campana','televisor'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
     this.bellBuffer = bell;
-    this.claps=applause;this.score=score;
+    this.score=score;this.television=television;
+    // Overlap the ends of the continuous clapping so a slow walk can last any length.
+    const rate=applause.sampleRate, length=Math.floor(4.5*rate), seam=Math.floor(.28*rate), from=Math.floor(.65*rate);
+    this.claps=ctx.createBuffer(applause.numberOfChannels,length,rate);
+    for(let ch=0;ch<applause.numberOfChannels;ch++){
+      const input=applause.getChannelData(ch),out=this.claps.getChannelData(ch);
+      out.set(input.subarray(from,from+length));
+      for(let i=0;i<seam;i++){
+        const a=i/seam*Math.PI/2;
+        out[i]=input[from+length+i]*Math.cos(a)+out[i]*Math.sin(a);
+      }
+    }
     const peakWindow=applause.getChannelData(0);
     let sum=0;
     for(const sample of peakWindow)sum+=sample*sample;
-    this.applauseGain=Math.min(8,.41/Math.max(.01,Math.sqrt(sum/peakWindow.length)));
+    this.applauseGain=Math.min(3,.119/Math.max(.01,Math.sqrt(sum/peakWindow.length)));
+    this.playApplause();
     // Skip leading recording silence so the strike lands on the round boundary.
     const data = bell.getChannelData(0);
     let first = 0;
@@ -77,31 +88,44 @@ export class Sound {
     this.crowdLevel = level;
     if (!this.venue) return;
     const gain = this.venue.gain, now=this.ctx.currentTime;
-    this.applauseBus.gain.cancelScheduledValues(now);
-    this.applauseBus.gain.setTargetAtTime(level===0?0:1,now,.012);
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(gain.value,now);
     gain.linearRampToValueAtTime(level,now+(level===0 ? .04 : .6));
   }
 
-  applaud(moment='entry') {
-    if(!this.claps)return;
-    const ctx=this.ctx,now=ctx.currentTime,title=moment==='title',rally=moment==='rally';
-    const length=title?7.3:rally?1.45:4.5,level=this.applauseGain*(title?1.16:rally?.47:1);
-    // Offset the two stands in space and time so the applause surrounds the ring.
-    for(const [pan,delay,offset,weight] of [[-.48,0,.18,.82],[.58,.14,1.0,.64]]){
-      const source=ctx.createBufferSource(),gain=ctx.createGain(),place=ctx.createStereoPanner();
-      source.buffer=this.claps;source.loop=title;source.loopStart=.5;source.loopEnd=5.5;
-      place.pan.value=pan;
-      const start=now+delay,peak=level*weight;
-      gain.gain.setValueAtTime(.0001,start);
-      gain.gain.linearRampToValueAtTime(peak,start+.16);
-      gain.gain.setValueAtTime(peak*.86,start+length*.66);
-      gain.gain.exponentialRampToValueAtTime(.0001,start+length);
-      source.connect(gain).connect(place).connect(this.applauseBus);
-      source.start(start,offset);source.stop(start+length);
-      source.onended=()=>{source.disconnect();gain.disconnect();place.disconnect();};
+  setApplause(moment, fade=.035) {
+    if(moment===this.applauseMoment)return;
+    this.applauseMoment=moment;
+    if(this.applause){
+      const {sources,gain,start,level}=this.applause,now=this.ctx.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(level*Math.min(1,(now-start)/.42),now);
+      gain.gain.linearRampToValueAtTime(0,now+fade);
+      for(const source of sources)source.stop(now+fade);
+      this.applause=null;
     }
+    this.playApplause();
+  }
+
+  playApplause() {
+    if(!this.claps||!this.applauseMoment||this.applause)return;
+    const ctx=this.ctx,now=ctx.currentTime,gain=ctx.createGain(),sources=[];
+    let playing=2;
+    const level=this.applauseGain*(this.applauseMoment==='title'?1.08:1);
+    gain.gain.setValueAtTime(0,now);
+    gain.gain.linearRampToValueAtTime(level,now+.42);
+    // Tame sharp individual claps without pulling down the bell or the voices.
+    const cushion=ctx.createWaveShaper();
+    cushion.curve=Float32Array.from({length:1025},(_,i)=>.34*Math.tanh((i/512-1)/.34));
+    gain.connect(cushion).connect(this.bus);
+    for(const [pan,offset,weight] of [[-.48,0,.82],[.58,1.27,.64]]){
+      const source=ctx.createBufferSource(),trim=ctx.createGain(),place=ctx.createStereoPanner();
+      source.buffer=this.claps;source.loop=true;trim.gain.value=weight;place.pan.value=pan;
+      source.connect(trim).connect(place).connect(gain);sources.push(source);
+      source.onended=()=>{source.disconnect();trim.disconnect();place.disconnect();if(--playing===0){gain.disconnect();cushion.disconnect();}};
+      source.start(now,offset);
+    }
+    this.applause={sources,gain,start:now,level};
   }
 
   startScore(){
@@ -123,20 +147,11 @@ export class Sound {
   }
 
   screensOn() {
-    if(!this.foley)return;
-    const ctx=this.ctx,now=ctx.currentTime;
-    const relay=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),tap=ctx.createGain();
-    relay.buffer=this.foley;filter.type='bandpass';filter.frequency.value=940;filter.Q.value=.85;
-    tap.gain.setValueAtTime(.17,now);tap.gain.exponentialRampToValueAtTime(.001,now+.065);
-    relay.connect(filter).connect(tap).connect(this.bus);relay.start(now,0,.07);
-    relay.onended=()=>{relay.disconnect();filter.disconnect();tap.disconnect();};
-    const coil=ctx.createOscillator(),gain=ctx.createGain();
-    coil.type='triangle';coil.frequency.setValueAtTime(115,now+.045);
-    coil.frequency.exponentialRampToValueAtTime(430,now+.34);
-    gain.gain.setValueAtTime(.0001,now+.045);gain.gain.linearRampToValueAtTime(.10,now+.13);
-    gain.gain.exponentialRampToValueAtTime(.0001,now+.68);
-    coil.connect(gain).connect(this.bus);coil.start(now+.045);coil.stop(now+.68);
-    coil.onended=()=>{coil.disconnect();gain.disconnect();};
+    if(!this.television)return;
+    const source=this.ctx.createBufferSource(),gain=this.ctx.createGain();
+    source.buffer=this.television;gain.gain.value=.87;
+    source.connect(gain).connect(this.bus);source.start();
+    source.onended=()=>{source.disconnect();gain.disconnect();};
   }
 
   bell() {
