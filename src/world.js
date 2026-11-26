@@ -1,3 +1,4 @@
+import {victoryCeremony} from './ceremony.js';
 import {boards} from './boards.js';
 import {centerCard,photographers} from './presentation.js';
 import {crowdFromStands} from './stands.js';
@@ -47,7 +48,7 @@ export async function createWorld(tick) {
   const desk=[0,1].map(i=>attachGlove(camera.object3D,i));
   const xr=hands.map((hand,i)=>attachGlove(hand.object3D,i));
   for(const hand of hands)hand.addEventListener('controller-model-ready',()=>{const mesh=hand.getObject3D('mesh');if(mesh)mesh.visible=false;});
-  const refArm=joint(ref,'DriveL');
+  const ceremony=victoryCeremony(scene,rig.object3D,ref,glove,belt);
   const fists=['L','R'].map(side=>({upper:joint(opponent,'Drive'+side),fore:joint(opponent,'Fore'+side)}));
   const display=await boards(world);
   const card=centerCard(scene.camera),flashes=photographers(world);
@@ -62,7 +63,7 @@ export async function createWorld(tick) {
   lamps?.traverse(n=>{if(n.isMesh)lampMats.push(...[n.material].flat());});
   const lightColor=new T.Color(),warm=new T.Color('#fff0d6'),cold=new T.Color('#809cae');
   const skyA=new T.Color('#172324'),skyB=new T.Color('#081119');
-  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ref,refArm,fists,belt,crowd,display,confetti,badge,card,flashes,
+  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ref,ceremony,fists,belt,crowd,display,confetti,badge,card,flashes,
     gate:arena.getObjectByName('Gate'),doors:[arena.getObjectByName('DoorL'),arena.getObjectByName('DoorR')],
     light(mix){key.intensity=2.8-2.35*mix;ambient.intensity=2.1-1.15*mix;rim.intensity=1.9-1.3*mix;
       ambient.color.copy(lightColor.copy(warm).lerp(cold,mix));world.background?.copy(skyA).lerp(skyB,mix);if(world.fog)world.fog.color.copy(world.background);

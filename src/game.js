@@ -14,7 +14,6 @@ const lessons=[
   [['P','Pausá la partida cuando lo necesites'],['Esquivá con el cuerpo','Cuando el rival cargue el golpe, inclinate o agachate']]
 ];
 const invitation=lessons.length*lessonTime;
-const beltRise=t=>smooth((t-1.5)/2.8);
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=n=>{n=clamp(n,0,1);return n*n*(3-2*n);};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -52,7 +51,7 @@ function transition(n){
     hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
-    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.ref.position.set(1.58,0,-1.45);w.ref.rotation.y=-.45;w.ref.visible=true;w.refArm(0,true);
+    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.ref.position.set(1.58,0,-1.45);w.ref.rotation.y=-.45;w.ref.visible=true;w.ceremony.reset();
     w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   FINAL','The Price of Victory','Ingresá al ring');
     sound.ambience(.23);
   }else if(n===1){
@@ -62,14 +61,10 @@ function transition(n){
   }else if(n===2){
     w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.55);
     w.opponent.visible=false;w.confetti.visible=!reduced;w.belt.visible=true;
-    // Keep the presentation in front of the player's current heading.
-    w.camera.object3D.getWorldDirection(forward);forward.negate();forward.y=0;forward.normalize();
-    const side=new T.Vector3(-forward.z,0,forward.x);
-    w.ref.position.copy(w.rig.position).addScaledVector(forward,1.20).addScaledVector(side,.72);
-    w.ref.rotation.y=Math.atan2(-forward.x,-forward.z);
-    tell('El árbitro te entrega el cinturón',3);
+    w.scene.camera.getWorldDirection(forward);w.ceremony.start(viewerPosition(head),forward);
+    tell('El árbitro levanta tu mano derecha',4);
   }else if(n===3){
-    w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.ref.visible=false;w.confetti.visible=false;
+    w.ceremony.letGo();w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.ref.visible=false;w.confetti.visible=false;
     sound.ambience(0);w.display.off();w.light(1);
     w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
@@ -143,10 +138,10 @@ function tick(dt){
   w.flashes.tick(dt,stage,reduced);
   const blocked=stage<=1&&guard();
   for(let i=0;i<2;i++){
-    w.desk[i].visible=!immersive;w.xr[i].visible=immersive;
+    const tracked=i===0||(stage!==2&&!(stage===3&&time<.9));
+    w.desk[i].visible=!immersive&&tracked;w.xr[i].visible=immersive&&tracked;
     const sign=i===0?-1:1,age=time-attacks[i],extend=stage<=1&&age>=0&&age<.32?Math.sin(age/.32*Math.PI):0;
-    const lift=stage===2 ? beltRise(time) : 0;
-    w.desk[i].position.set(sign*((blocked?.13:.245)+lift*.105),-.29+(blocked?.18:0)+lift*.40,-.44-.43*extend-lift*.36);
+    w.desk[i].position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0),-.44-.43*extend);
     w.desk[i].rotation.x=-.43-.49*extend;w.xr[i].rotation.x=-.8;
   }
   if(stage===0){
@@ -217,7 +212,7 @@ function tick(dt){
     if(time>=round)transition(2);
   }else if(stage===2||stage===3){
     if(stage===2){
-      w.refArm(-beltRise(time)*2.35,true);w.confetti.position.y=-((time*.45)%1.5);
+      w.scene.camera.getWorldDirection(forward);w.ceremony.tick(time,viewerPosition(head),forward);w.confetti.position.y=-((time*.45)%1.5);
       if(time>=8)transition(3);
     }else{
       if(time<4)w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',smooth((4-time)/.8),'question');
@@ -231,19 +226,9 @@ function tick(dt){
     if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','The Price of Victory');w.badge.visible=true;}
     if(time>=9)finish();
   }
-  if(w.belt.visible){
+  if(w.belt.visible&&stage!==2){
     const cam=w.scene.camera;cam.getWorldPosition(head);cam.getWorldQuaternion(headOrientation);
-    if(stage===2){
-      // Both modalities see the trophy handed forward, then raised above eye level.
-      const lift=beltRise(time);
-      target.set(0,-.44+.62*lift,-.88).applyQuaternion(headOrientation);
-      w.belt.position.copy(head).add(target);w.belt.quaternion.copy(headOrientation);w.belt.rotateX(-.18);
-    }else if(immersive){
-      w.hands[0].object3D.getWorldPosition(w.belt.position);w.hands[0].object3D.getWorldQuaternion(w.belt.quaternion);
-      w.belt.translateY(-.10);w.belt.translateZ(-.10);
-    }else{
-      target.set(-.13,-.43,-.62).applyQuaternion(headOrientation);w.belt.position.copy(head).add(target);w.belt.quaternion.copy(headOrientation);w.belt.rotateX(-.3);
-    }
+    w.ceremony.carry(immersive?w.xr[1]:w.desk[1],stage===3?time:1);
     if(w.badge.visible){w.badge.position.copy(head).add(target.set(0,.17,-2.7).applyQuaternion(headOrientation));w.badge.quaternion.copy(headOrientation);}
   }
 }

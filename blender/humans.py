@@ -8,8 +8,10 @@ from math import sin,cos,pi
 from pathlib import Path
 from collections import defaultdict
 import bpy
+import bmesh
 import numpy as np
 from mathutils import Vector, Matrix
+from mathutils.kdtree import KDTree
 
 
 def read_obj(path):
@@ -59,6 +61,37 @@ def component_weights(source,skel,n):
         for i,w in entries: weights[i,index]+=w
     weights[:,0]=np.maximum(0,1-weights.sum(axis=1))
     return weights/np.maximum(weights.sum(axis=1,keepdims=True),.0001)
+
+
+def finish_sleeves(obj):
+    """Extend the open cotton cuffs over the upper arm through the raised pose."""
+    bm=bmesh.new()
+    bm.from_mesh(obj.data)
+    deform=bm.verts.layers.deform.verify()
+    for sign,bone in [(-1,'DriveL'),(1,'DriveR')]:
+        sleeve=[edge for edge in bm.edges if edge.is_boundary and
+                all(sign*v.co.x>.14 and 1.24<v.co.z<1.43 for v in edge.verts)]
+        rim={v for edge in sleeve for v in edge.verts}
+        center=sum((v.co for v in rim),Vector())/len(rim)
+        previous={v:v for v in rim}
+        # Small turned hem covers the skin cutout on the inside of the sleeve.
+        for advance,radius in [(.048,1.06),(.059,1.05),(.059,.91),(.047,.91)]:
+            ring={}
+            for v in rim:
+                position=center+(v.co-center)*radius+Vector((sign*.30,-.16,-.93))*advance
+                vertex=bm.verts.new(position)
+                vertex[deform][obj.vertex_groups[bone].index]=1
+                ring[v]=vertex
+            for edge in sleeve:
+                loop=edge.link_loops[0]
+                a,b=loop.vert,loop.link_loop_next.vert
+                face=bm.faces.new([previous[b],previous[a],ring[a],ring[b]])
+                face.material_index=loop.face.material_index
+                face.smooth=True
+            previous=ring
+    bm.normal_update()
+    bm.to_mesh(obj.data)
+    bm.free()
 
 
 def build_people(source, collection, official):
@@ -153,6 +186,16 @@ def build_people(source, collection, official):
 
     clothes,cw,cu,cf,hidden=fitted('male_casualsuit04')
     shoes,sw,su,sf,feet=fitted('shoes01')
+    if official:
+        # Fit the shirt to the anatomical surface. Some clothing proxy vertices
+        # carry static helper weights that leave the cuff behind the raised arm.
+        tree=KDTree(len(ids))
+        for i in ids:tree.insert(rest[i],int(i))
+        tree.balance()
+        for i,point in enumerate(clothes[:810]):
+            nearest=tree.find_n(point,4)
+            values=np.array([1/max(.002,distance)**2 for _,_,distance in nearest])
+            cw[i]=np.average([weights[j] for _,j,_ in nearest],axis=0,weights=values)
     garment=[]
     for f in cf:
         index=[i for i,j in f];y=clothes[index,1].mean()
@@ -164,7 +207,8 @@ def build_people(source, collection, official):
         garment.append((f,mat))
     if not official:
         clothes[810:,1]=np.maximum(clothes[810:,1],.616)
-    part('kit',clothes,cw,cu,garment)
+    kit=part('kit',clothes,cw,cu,garment)
+    if official:finish_sleeves(kit)
     if official:
         shoe_mat=texture(label+' footwear',source/'shoes01_diffuse-small.png')
         part('shoes',shoes,sw,su,[(f,shoe_mat) for f in sf])
@@ -214,6 +258,10 @@ def build_people(source, collection, official):
         for face in mesh.polygons:face.use_smooth=True
         obj=bpy.data.objects.new(mesh.name,mesh);collection.objects.link(obj);obj.parent=arm
     if official:
+        grip=bpy.data.objects.new('VictoryGrip',None)
+        accessory(grip,'VictoryGrip',(-.245,.843,.137),'ForeL')
+        grip.name='VictoryGrip'
+        grip.empty_display_size=.025
         # Shirt front is sampled from the fitted garment, so the bow sits on the cloth.
         neck=joint('neck01')[1]-.048
         center=clothes[(abs(clothes[:,0])<.095)&(abs(clothes[:,1]-neck)<.055),2].max()+.005
