@@ -1,4 +1,4 @@
-# The Price of Victory
+# El precio de la victoria
 
 Una experiencia de boxeo en primera persona de **Fair Play** sobre el sportswashing. Una final ficticia da paso a un archivo documental sobre Qatar y Sochi. El recorrido dura aproximadamente dos minutos y medio.
 
@@ -19,7 +19,8 @@ Abrí [localhost en el puerto 8000](http://localhost:8000) y elegí **Entrar al 
 | Mirar | Mouse. Si está libre, hacé clic en el ring | Girar la cabeza |
 | Moverte | WASD | Stick izquierdo |
 | Girar por pasos | — | Stick derecho |
-| Golpear | Clic izquierdo, mirando al rival desde cerca | Acercar un guante al rival con movimiento o pulsar el gatillo a corta distancia |
+| Jab | Clic izquierdo | Gesto hacia adelante con cualquiera de los mandos o gatillo izquierdo |
+| Uppercut | Clic derecho | Gesto ascendente con cualquiera de los mandos o gatillo derecho |
 | Esquivar | Salir de la trayectoria con WASD durante la preparación | Inclinarte, agacharte o dar un paso con el cuerpo cuando el rival carga el golpe |
 | Bloquear | Mantener espacio | Levantar ambos guantes cerca de la cara o mantener agarre |
 | Pausar | P o botón Pausa | Salir de la sesión del visor |
@@ -31,8 +32,8 @@ Abrí el enlace **HTTPS** en el navegador del visor o en un navegador con un vis
 
 ## Editar la experiencia
 
-- **Modelos**. Abrí `blender/FairPlay.blend`. El archivo contiene el estadio, la tribuna, el rival, los guantes y el cinturón. La colección `Athletes / opponent` incluye las texturas, un esqueleto de 13 huesos y nueve animaciones de guardia, avance, retroceso, desplazamiento lateral, esquiva y golpes. En Blender podés verlas en el editor de animación no lineal (NLA). `blender/humans.py` adapta el modelo de MakeHuman y `blender/footwork.py` anima su postura. `blender/belt.py` genera el cinturón. `blender/build.py` exporta los cinco GLB. Para regenerarlos, abrí una sesión nueva con `blender --background --python blender/build.py`.
-- **Recorrido y controles**. `src/game.js` contiene las seis etapas, los tiempos y los controles comunes. `src/world.js` carga las mallas y `src/stands.js` distribuye las siluetas en veinte filas y dos bandejas. `src/audio.js` mezcla las grabaciones del estadio y la campana con el contacto de los guantes. Podés ajustar el volumen desde **Ver controles** o **Pausa**. La campana marca el inicio y el final del único round. El público aplaude cuando cruzás la puerta después del tutorial y al ganar. En la victoria el jugador levanta el cinturón con ambos guantes. La secuencia está en `src/ceremony.js`. Después de levantar el cinturón, la pregunta aparece centrada en la vista del jugador y coincide con el corte del público. El encendido de las pantallas se escucha al terminar el silencio. Las noticias cambian cada 8,5 segundos. Con los focos apagados, los cuatro televisores proyectan luz sobre el ring y toman su tonalidad de la imagen que muestran.
+- **Modelos**. Abrí `blender/FairPlay.blend`. El archivo contiene el estadio, la tribuna, el rival, los guantes y el cinturón. La colección `Athletes / opponent` incluye las texturas, un esqueleto de 13 huesos y once animaciones de guardia, avance, retroceso, desplazamiento lateral, esquiva, golpes y reacciones. En Blender podés verlas en el editor de animación no lineal (NLA). `blender/humans.py` adapta el modelo de MakeHuman y `blender/footwork.py` anima su postura. `blender/belt.py` genera el cinturón. `blender/build.py` exporta los cinco GLB. Para regenerarlos, abrí una sesión nueva con `blender --background --python blender/build.py`.
+- **Recorrido y controles**. `src/game.js` contiene las seis etapas, los tiempos y los controles comunes. `src/world.js` carga las mallas y `src/stands.js` distribuye las siluetas en veinte filas y dos bandejas. `src/audio.js` mezcla las grabaciones del estadio y la campana con el contacto de los guantes. Podés ajustar el volumen desde **Ver controles** o **Pausa**. La campana marca el inicio y el final del único round. El público aplaude cuando cruzás la puerta después del tutorial y al ganar. En la victoria el jugador levanta el cinturón con ambos guantes. La secuencia está en `src/ceremony.js`. Después de levantar el cinturón, la pregunta aparece centrada en la vista del jugador y coincide con el corte del público. Después de la pregunta y una pausa entra *Después de la campana*, una composición original de piano y cuerdas graves. El encendido de las pantallas se escucha al comenzar las noticias. Las noticias cambian cada 8,5 segundos. Con los focos apagados, los cuatro televisores proyectan luz sobre el ring y toman su tonalidad de la imagen que muestran.
 - **Archivo documental**. Cada ficha de `src/archive.js` tiene lugar, año, titular, texto, fuente, enlace e ilustración. Conservá la atribución, la fecha y el contexto de cada caso. Las cuatro escenas en `assets/archive.webp` son ilustraciones editoriales generadas para el juego. En el estadio se muestra la frase breve y en el cierre se puede leer el contexto completo. El cierre conserva el testimonio en inglés junto a su traducción. La pantalla de cierre enlaza las investigaciones originales.
 - **Identidad**. Logotipo del proyecto Fair Play, Playfair Display y Arial. La ilustración fotográfica de portada se generó para la experiencia.
 

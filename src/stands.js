@@ -38,6 +38,21 @@ export function crowdFromStands(){
     }
   }
   const crowd=new T.InstancedMesh(geo,new T.MeshBasicMaterial({vertexColors:true}),poses.length);
+  const clock={value:0},response={value:0};
+  crowd.material.onBeforeCompile=shader=>{
+    shader.uniforms.standTime=clock;shader.uniforms.standResponse=response;
+    shader.vertexShader='uniform float standTime; uniform float standResponse;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+      #include <begin_vertex>
+      vec2 seat=instanceMatrix[3].xz;
+      float section=sin(standTime*2.9+dot(seat,vec2(.13,.17)));
+      float individual=sin(standTime*4.1+dot(seat,vec2(3.31,1.74)));
+      transformed.y+=standResponse*(.28+.12*section+.075*individual);
+      transformed.x+=position.y*standResponse*(.04*section+.025*individual);
+    `);
+  };
+  crowd.userData.animate=(dt,level)=>{
+    clock.value+=dt;response.value+=(level-response.value)*(1-Math.exp(-dt*4));
+  };
   const palette=['#4d6065','#425459','#5b6c6d','#726867','#475a62','#657470','#596369'];
   poses.forEach((m,i)=>{crowd.setMatrixAt(i,m);crowd.setColorAt(i,new T.Color(palette[(i*17+Math.floor(i/11))%palette.length]));});
   return crowd;

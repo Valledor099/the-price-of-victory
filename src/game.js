@@ -1,5 +1,6 @@
 import {createWorld} from './world.js';
 import {archive} from './archive.js';
+import {strikes,glovePose} from './strikes.js';
 import {Sound} from './audio.js';
 
 const $=s=>document.querySelector(s), T=globalThis.AFRAME?.THREE;
@@ -9,7 +10,7 @@ const round=38,cardTime=8.5,lessonTime=6;
 const lessons=[
   [['Mouse','Mirá alrededor del estadio'],['Mirá alrededor','Girando la cabeza podés explorar el estadio']],
   [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá dar unos pasos por el túnel']],
-  [['Clic izquierdo','Probá lanzar un golpe al aire'],['Gatillo','Probá un golpe al aire con cualquiera de los mandos']],
+  [['Clic izquierdo / derecho','Jab recto con el izquierdo · Uppercut ascendente con el derecho'],['Jab / Uppercut','Mové el guante al frente o hacia arriba. Gatillos: izq. jab · der. uppercut']],
   [['Espacio','Mantenelo apretado para subir la guardia'],['Agarre','Mantenelo apretado o acercá los guantes a la cara']],
   [['P','Pausá la partida cuando lo necesites'],['Esquivá con el cuerpo','Cuando el rival cargue el golpe, inclinate o agachate']]
 ];
@@ -21,11 +22,15 @@ let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
 let entranceApplauded=false;
 let dodges=0,lockedCycle=-1;
 let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
-let hits=0,blocks=0,attempt=-1,lastPunch=-1,activeHand=0,lastCard=-1,noticeUntil=0,finStep=-1;
-let attacks=[-10,-10], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
-let head,forward,target,handPos,prevHands,velocity,headOrientation;
-const guide='WASD para moverte, mouse para mirar, clic izquierdo para golpear y espacio para bloquear. P pausa la partida. Si el navegador libera el mouse, hacé clic en el ring para recuperarlo.';
-const vrGuide='En VR, mirá alrededor y usá el stick izquierdo para moverte. El derecho gira por pasos. Golpeá acercando un guante al rival o usá el gatillo. Levantá ambos guantes o mantené el agarre para bloquear. Cuando el rival prepare un golpe, inclinate a un lado o agachate. Al terminar el tutorial podés acercarte al ring con el stick o usar el gatillo cuando aparezca la invitación.';
+let hits=0,blocks=0,attempt=-1,lastPunch=-1,lastCard=-1,noticeUntil=0,finStep=-1;
+let attacks=[null,null],lastType='jab',musicStarted=false,gestureReady=[false,false], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
+let head,forward,target,handPos,prevHands,velocity,headOrientation,offset,angles,controllerQ,localHand;
+let lastRally=-20,knuckle,delta;
+function facePoint(i,out){
+  out.set(i?.035:-.035,.097,.105);return w.impactTarget.localToWorld(out);
+}
+const guide='WASD para moverte, mouse para mirar, clic izquierdo para jab, clic derecho para uppercut y espacio para bloquear. P pausa la partida. Si el navegador libera el mouse, hacé clic en el ring para recuperarlo.';
+const vrGuide='En VR, mirá alrededor y usá el stick izquierdo para moverte. El derecho gira por pasos. El juego reconoce el jab hacia adelante y el uppercut ascendente con cualquiera de las manos. También podés usar el gatillo izquierdo para jab o el derecho para uppercut. Levantá ambos guantes o mantené el agarre para bloquear. Cuando el rival prepare un golpe, inclinate a un lado o agachate. Al terminar el tutorial podés acercarte al ring con el stick o usar el gatillo cuando aparezca la invitación.';
 function modal(title,body,buttons){
   const dialog=$('#modal');if(dialog.open)dialog.close();
   $('#modal-title').textContent=title;$('#modal-body').replaceChildren(...body);
@@ -49,21 +54,22 @@ function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   if(n===0){
+    musicStarted=false;sound.stopScore();lastRally=-20;gestureReady=[false,false];
     entranceApplauded=false;w.display.glow(0);w.card.darken(0);
-    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
+    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
     w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.opponent.rotation.set(0,0,0);w.ceremony.reset();
-    w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   FINAL','The Price of Victory','Ingresá al ring');
+    w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   CAMPEONATO MUNDIAL','El precio de la victoria','Dos esquinas. Un cinturón en juego.');
     sound.ambience(.23);
   }else if(n===1){
     if(!entranceApplauded){sound.applaud();entranceApplauded=true;}
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5);
     w.rig.position.set(0,0,1.05);w.opponent.position.set(0,0,-.2);w.gate.visible=true;
-    lastPunch=-1;attacks=[-10,-10];sound.ambience(.31);sound.bell();w.display.set('ROUND 01','La gran final','Gatillo o clic para golpear · Agarre o espacio para bloquear');
-    tell('Acercate al rival · Clic para golpear · Espacio para bloquear',4);
+    lastPunch=-1;attacks=[null,null];sound.ambience(.41);sound.bell();w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL','El cinturón está en juego','Jab · Uppercut · Bloqueo');
+    tell('Round final por el título mundial',3);
   }else if(n===2){
-    w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.44);sound.applaud(true);
+    w.display.set('DECISIÓN DEL JURADO','¡Campeón del mundo!','El cinturón mundial es tuyo');sound.bell();sound.ambience(.44);sound.applaud('title');
     w.opponent.visible=false;w.confetti.visible=!reduced;w.belt.visible=true;
     w.scene.camera.getWorldDirection(forward);w.ceremony.start(viewerPosition(head),forward);
     tell('Levantás el cinturón de campeón',3);
@@ -79,13 +85,13 @@ function begin(){
   clearInput();sound.start().catch(()=>{});transition(0);if(!immersive)lock();w.scene.resize();
 }
 function finish(){
-  finished=true;running=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();
-  if(immersive){w.display.set('FAIR PLAY','The Price of Victory','Gatillo para volver a jugar');return;}
+  sound.stopScore();finished=true;running=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();
+  if(immersive){w.display.set('FAIR PLAY','El precio de la victoria','Gatillo para volver a jugar');return;}
   const list=document.createElement('ul');
   for(const c of archive){const li=document.createElement('li'),a=document.createElement('a');a.href=c.url;a.target='_blank';a.rel='noopener';a.textContent=c.title+' · '+c.source;li.append(a,document.createTextNode(' — '+c.body));list.append(li);}
   modal('¿Qué quedó fuera de cámara?',[paragraph('El sportswashing usa el prestigio del deporte para mejorar una imagen pública. Estas investigaciones documentan los casos que viste en el estadio.'),list],[['Volver a jugar',begin],['Ir a portada',home]]);
 }
-function home(){running=false;finished=false;paused=false;sound.ambience(0);$('#hud').hidden=true;$('#lobby').hidden=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();}
+function home(){sound.stopScore();running=false;finished=false;paused=false;sound.ambience(0);$('#hud').hidden=true;$('#lobby').hidden=false;clearInput();if(document.pointerLockElement)document.exitPointerLock();}
 function togglePause(){
   if(!running||immersive)return;
   if(paused){paused=false;$('#modal').close();sound.ctx?.resume();lock();return;}
@@ -110,17 +116,34 @@ function clearsStrike(position){
   relativeHead.addScaledVector(strikeAxis,-fraction);
   return relativeHead.lengthSq()>.18*.18;
 }
-function punch(i,physical=false){
-  if(!running||paused||(stage!==1&&stage!==0)||time-lastPunch<.27)return;
-  lastPunch=time;attacks[i]=time;activeHand=i;
-  if(stage===0)return;
-  viewerPosition(head);w.opponent.getWorldPosition(target);target.y=head.y-.13;
+function connect(i,kind,physical,contactDistance=0){
+  const reach=strikes[kind].range;
+  viewerPosition(head);facePoint(i,target);
   w.scene.camera.getWorldDirection(forward);
   const range=target.distanceTo(head),aim=target.sub(head).normalize().dot(forward);
-  if(physical||(range<1.7&&aim>.59)){
-    hits++;lastHit=time;sound.contact();tell('Golpe conectado',.65);updateStats();
-    w.hands[i].components['tracked-controls']?.controller?.gamepad?.hapticActuators?.[0]?.pulse(.25,70);
-  }else{tell(range>=1.7?'Acercate un paso':'Mirá al rival',.7);}
+  if(!physical&&(contactDistance>.175||range>reach+.04||aim<.72)){
+    tell(range>reach?'Acercate un paso':aim<.72?'Mirá al rival':'El golpe pasó de largo',.55);return;
+  }
+  hits++;lastHit=time;lastType=kind;
+  const phase=time%3.4;
+  if(phase>=1.55&&phase<2.48)attempt=Math.floor(time/3.4);
+  sound.contact(false,kind);tell(kind==='jab'?'Jab conectado':'Uppercut conectado',.85);updateStats();
+  if(hits%3===0&&time-lastRally>4){sound.applaud('rally');lastRally=time;}
+  w.hands[i].components['tracked-controls']?.controller?.gamepad?.hapticActuators?.[0]?.pulse(kind==='jab'?.22:.37,65);
+}
+function punch(i,kind,physical=false){
+  if(!running||paused||stage>1||stage<0||time-lastPunch<.22)return;
+  const previous=attacks[i];
+  if(previous&&time-previous.start<strikes[previous.kind].recovery)return;
+  lastPunch=time;
+  let goal=null;
+  if(stage===1&&!physical){
+    facePoint(i,target);viewerPosition(head);w.scene.camera.getWorldDirection(forward);
+    delta.subVectors(target,head);
+    if(delta.length()<=strikes[kind].range&&delta.normalize().dot(forward)>.75)goal=target.clone();
+  }
+  attacks[i]={start:time,kind,goal,physical,resolved:physical||stage===0};
+  if(physical&&stage===1)connect(i,kind,true);
 }
 function guard(){
   if(keys.has('Space')||grips.size)return true;
@@ -140,20 +163,54 @@ function tick(dt){
   if(!w||!running||paused||document.hidden)return;
   time+=dt;if(time>noticeUntil)$('#cue').textContent='';
   w.flashes.tick(dt,stage,reduced);
+  if(stage<=2&&!reduced){
+    const energy=stage===2?1:stage===1?Math.max(.16,(time>round-10?.70:0),1-clamp((time-lastRally)/2.4,0,1)):entranceApplauded?.8:0;
+    w.crowd.userData.animate(dt,energy);
+  }
   const blocked=stage<=1&&guard();
   for(let i=0;i<2;i++){
     const tracked=stage!==2&&!(stage===3&&time<.85);
     w.desk[i].visible=!immersive&&tracked;w.xr[i].visible=immersive&&tracked;
-    const sign=i===0?-1:1,age=time-attacks[i],extend=stage<=1&&age>=0&&age<.32?Math.sin(age/.32*Math.PI):0;
-    w.desk[i].position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0),-.44-.43*extend);
-    w.desk[i].rotation.x=-.43-.49*extend;w.xr[i].rotation.x=-.8;
+    const sign=i===0?-1:1,a=attacks[i],age=a?time-a.start:-1;
+    const animated=stage<=1&&a&&!a.physical;
+    const arrives=stage===1&&a&&!a.resolved&&age>=strikes[a.kind].contact;
+    const poseAge=arrives?strikes[a.kind].contact:age;
+    glovePose(a?.kind||'jab',animated?poseAge:-1,offset,angles);
+    offset.x*=sign;
+    const desk=w.desk[i],xr=w.xr[i];
+    desk.position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0),-.44).add(offset);
+    desk.rotation.set(-.43+angles.x,sign*angles.y,sign*-.14);
+    xr.position.set(0,0,0);xr.rotation.set(-.8+angles.x,sign*angles.y,sign*-.14);
+    if(immersive&&animated){
+      w.scene.camera.getWorldQuaternion(headOrientation);
+      w.hands[i].object3D.getWorldQuaternion(controllerQ);
+      xr.position.copy(offset).multiplyScalar(.67).applyQuaternion(headOrientation).applyQuaternion(controllerQ.invert());
+    }
+    const hand=immersive?xr:desk;
+    if(animated&&a.goal&&poseAge<strikes[a.kind].keys.at(-1)[0]){
+      const apex=strikes[a.kind].contact;
+      const weight=poseAge<=apex?smooth((poseAge/apex-.30)/.70):1-smooth((poseAge-apex)/.15);
+      hand.localToWorld(knuckle.set(0,.12,.012));
+      hand.parent.worldToLocal(knuckle);
+      hand.parent.worldToLocal(delta.copy(a.goal)).sub(knuckle).clampLength(0,immersive?.80:.55);
+      hand.position.addScaledVector(delta,weight);
+    }
+    if(arrives){
+      a.resolved=true;hand.localToWorld(knuckle.set(0,.12,.012));
+      connect(i,a.kind,false,knuckle.distanceTo(facePoint(i,target)));
+    }
   }
+  w.scene.camera.getWorldQuaternion(headOrientation);
+  w.poseArms(stage<=1,viewerPosition(head),headOrientation,immersive?w.xr:w.desk);
   if(stage===0){
     w.animateBoxer(dt,time%8>6.6?'Weave':'GuardFootwork',.86);
     const opening=smooth((time-invitation)/.90);
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5*opening);
     move(dt);
-    if(time>=invitation&&!entranceApplauded&&w.rig.position.z<6.75){sound.applaud();entranceApplauded=true;}
+    if(time>=invitation&&!entranceApplauded&&w.rig.position.z<6.75){
+      sound.applaud();entranceApplauded=true;
+      w.display.set('EN VIVO   /   PRESENTACIÓN','¡Entra el aspirante!','Final por el campeonato mundial de boxeo');
+    }
     if(time<invitation){
       const index=Math.floor(time/lessonTime),local=time%lessonTime;
       const alpha=Math.min(smooth(local/.65),smooth((lessonTime-local)/.85));
@@ -185,7 +242,7 @@ function tick(dt){
     o.x=clamp(o.x+dx/dist*speed+dz/dist*circle,-2.6,2.6);
     o.z=clamp(o.z+dz/dist*speed-dx/dist*circle,-2.6,2.6);
     if(!committing||lockedCycle!==cycle)w.opponent.rotation.y=Math.atan2(dx,dz);o.y=0;
-    const reaction=clamp((time-lastHit)/.32,0,1);
+    const hitAge=time-lastHit,reactDuration=lastType==='jab'?.34:.51;
 
     if(phase>=1.55&&lockedCycle!==cycle){
       lockedCycle=cycle;
@@ -205,28 +262,39 @@ function tick(dt){
     }else{
       motion=lateral>0?'CircleRight':'CircleLeft';pace=clamp(Math.abs(lateral)/.52,.55,1.4);
     }
-    w.animateBoxer(dt,motion,pace,strikeTime,Math.sin(reaction*Math.PI));
-    if(phase>1.55&&phase<2.14)tell('El rival prepara un golpe',.32);
+    if(hitAge>=0&&hitAge<reactDuration){
+      motion=lastType==='jab'?'ReactJab':'ReactUppercut';strikeTime=hitAge/reactDuration;
+    }
+    w.animateBoxer(dt,motion,pace,strikeTime);
+    if(hitAge>.65&&phase>1.55&&phase<2.14)tell('El rival prepara un golpe',.32);
     if(phase>=2.48&&attempt!==cycle){attempt=cycle;
       if(clearsStrike(head)){dodges++;tell('Esquivaste',.8);}
       else if(blocked){blocks++;tell('Bloqueo',.8);sound.contact(true);}
       else{tell('El rival conecta',.8);sound.contact();}updateStats();
     }
     if(immersive){
-      for(let j=0;j<2;j++){w.hands[j].object3D.getWorldPosition(handPos);
-        velocity.copy(handPos).sub(prevHands[j]);const speed=velocity.length()/Math.max(.008,dt);
-        target.copy(o);target.y+=1.46;
-        if(speed>1.05&&handPos.distanceTo(target)<.42&&velocity.dot(target.sub(handPos))>0)punch(j,true);
-        prevHands[j].copy(handPos);
+      w.impactTarget.getWorldPosition(target);
+      for(let j=0;j<2;j++){
+        w.hands[j].object3D.getWorldPosition(handPos);
+        localHand.copy(handPos);w.rig.worldToLocal(localHand);
+        if(gestureReady[j]){
+          velocity.copy(localHand).sub(prevHands[j]).divideScalar(Math.max(.008,dt)).applyQuaternion(w.rig.quaternion);
+          const speed=velocity.length(),toward=forward.subVectors(target,handPos).normalize();
+          const rising=velocity.y>.74&&velocity.y>Math.hypot(velocity.x,velocity.z)*.82;
+          if(speed>.95&&speed<10&&handPos.distanceTo(target)<.38&&velocity.dot(toward)>.20)
+            punch(j,rising?'uppercut':'jab',true);
+        }
+        prevHands[j].copy(localHand);gestureReady[j]=true;
       }
     }
     $('#clock').textContent='0:'+String(Math.max(0,Math.ceil(round-time))).padStart(2,'0');
     const score=$('#clock').textContent+'   /   '+hits+' conectados   ·   '+blocks+' bloqueos   ·   '+dodges+' esquivas';
-    if(immersive){
-      const alert=phase>=1.55&&phase<2.15?'El rival carga el golpe':($('#cue').textContent==='Esquivaste'?'¡Esquivaste!':'La gran final');
+    {
+      const alert=hitAge<.75?(lastType==='jab'?'Jab conectado':'Uppercut conectado'):time>=round-10?'Últimos diez segundos':immersive&&phase>=1.55&&phase<2.15?'El rival carga el golpe':'Campeonato mundial';
       const broadcast=alert+score;
-      if(broadcast!==boardState){w.display.set('ROUND 01',alert,score);boardState=broadcast;}
+      if(broadcast!==boardState){w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL',alert,score);boardState=broadcast;}
     }
+    if(time>=round-10&&time-dt<round-10){sound.applaud('rally');tell('¡Diez segundos!',1);}
     if(time>=round)transition(2);
   }else if(stage===2||stage===3){
     if(stage===2){
@@ -236,6 +304,7 @@ function tick(dt){
       w.ceremony.tick(time,true);
       if(time<4)w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',smooth((4-time)/.8),'question');
       else w.card.hide();
+      if(time>=6.6&&!musicStarted){musicStarted=true;sound.startScore();}
       if(time>=11.5)transition(4);
     }
   }else if(stage===4){
@@ -244,7 +313,7 @@ function tick(dt){
     const i=Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
     if(i!==lastCard){if(i===0)sound.screensOn();const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
   }else if(stage===5){
-    if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','The Price of Victory');w.display.glow(.65);w.badge.visible=true;}
+    if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','El precio de la victoria');w.display.glow(.65);w.badge.visible=true;}
     if(time>=9)finish();
   }
   if(w.badge.visible){
@@ -260,9 +329,12 @@ function bind(){
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!immersive&&!paused)togglePause();});
   document.addEventListener('mousemove',e=>{if(!running||paused||immersive||!document.pointerLockElement)return;
     const look=w.camera.components['look-controls'];look.yawObject.rotation.y-=e.movementX*.002;look.pitchObject.rotation.x=clamp(look.pitchObject.rotation.x-e.movementY*.002,-1.4,1.4);});
-  w.scene.canvas.addEventListener('mousedown',e=>{if(e.button===0&&running&&!paused&&!immersive){lock();punch(1-activeHand);}});
+  w.scene.canvas.addEventListener('contextmenu',e=>{if(running)e.preventDefault();});
+  w.scene.canvas.addEventListener('mousedown',e=>{if((e.button===0||e.button===2)&&running&&!paused&&!immersive){
+    lock();punch(e.button===2?1:0,e.button===2?'uppercut':'jab');
+  }});
   w.hands.forEach((h,i)=>{
-    h.addEventListener('triggerdown',()=>{if(finished){begin();return;}if(running&&!paused&&stage===0&&time>=invitation){transition(1);return;}punch(i);});
+    h.addEventListener('triggerdown',()=>{if(finished){begin();return;}if(running&&!paused&&stage===0&&time>=invitation){transition(1);return;}punch(i,i?'uppercut':'jab');});
     h.addEventListener('gripdown',()=>grips.add(i));h.addEventListener('gripup',()=>grips.delete(i));
     h.addEventListener('thumbstickmoved',e=>{const {x,y}=e.detail;if(!i)axis=[Math.abs(x)>.16?x:0,Math.abs(y)>.16?y:0];else if(Math.abs(x)<.3)snapReady=true;else if(Math.abs(x)>.75&&snapReady){w.rig.rotation.y-=Math.sign(x)*Math.PI/6;snapReady=false;}});
   });
@@ -274,6 +346,7 @@ async function init(){
   // Keep a working cover and instructions even when the device cannot create WebGL.
   try{
     if(!T)throw Error('Falta el motor 3D.');
+    knuckle=new T.Vector3();delta=new T.Vector3();offset=new T.Vector3();angles=new T.Vector2();controllerQ=new T.Quaternion();localHand=new T.Vector3();
     strikeStart=new T.Vector3();strikeEnd=new T.Vector3();strikeAxis=new T.Vector3();relativeHead=new T.Vector3();otherEye=new T.Vector3();
     head=new T.Vector3();forward=new T.Vector3();target=new T.Vector3();handPos=new T.Vector3();prevHands=[new T.Vector3(),new T.Vector3()];velocity=new T.Vector3();headOrientation=new T.Quaternion();
     [w]=await Promise.all([createWorld(tick),sound.prepare()]);bind();

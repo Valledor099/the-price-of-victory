@@ -1,3 +1,4 @@
+import {playerArms} from './strikes.js';
 import {victoryCeremony} from './ceremony.js';
 import {boards} from './boards.js';
 import {centerCard,photographers} from './presentation.js';
@@ -21,9 +22,7 @@ function boxerMotion(model){
   const actions=new Map(model.animations.map(clip=>[clip.name,mixer.clipAction(clip)]));
   let current=actions.get('GuardFootwork');
   current.play();
-  const chest=model.getObjectByName('Chest'),head=model.getObjectByName('Head');
-  const baseChest=chest.quaternion.clone(),baseHead=head.quaternion.clone();
-  return (dt,name='GuardFootwork',pace=1,strikeTime=null,hit=0)=>{
+  return (dt,name='GuardFootwork',pace=1,strikeTime=null)=>{
     const next=actions.get(name);
     if(current!==next){
       const phase=current.time/current.getClip().duration;
@@ -41,10 +40,7 @@ function boxerMotion(model){
       action.weight+=((action===current?1:0)-action.weight)*blend;
       if(action!==current&&action.weight<.002)action.stop();
     }
-    chest.quaternion.copy(baseChest);head.quaternion.copy(baseHead);
     mixer.update(dt);
-    baseChest.copy(chest.quaternion);baseHead.copy(head.quaternion);
-    chest.rotateX(-.24*hit);head.rotateZ(.19*hit);
   };
 }
 export async function createWorld(tick) {
@@ -74,7 +70,8 @@ export async function createWorld(tick) {
   const xr=hands.map((hand,i)=>attachGlove(hand.object3D,i));
   for(const hand of hands)hand.addEventListener('controller-model-ready',()=>{const mesh=hand.getObject3D('mesh');if(mesh)mesh.visible=false;});
   const ceremony=victoryCeremony(scene,glove,belt,armParts);
-  const animateBoxer=boxerMotion(opponent);
+  const animateBoxer=boxerMotion(opponent),poseArms=playerArms(world,armParts);
+  const impactTarget=opponent.getObjectByName('Head');
   const display=await boards(world);
   const card=centerCard(scene.camera),flashes=photographers(world);
   crowd.name='Afición';belt.name='Cinturón';
@@ -90,7 +87,7 @@ export async function createWorld(tick) {
   }});
   const lightColor=new T.Color(),warm=new T.Color('#fff0d6'),cold=new T.Color('#809cae');
   const skyA=new T.Color('#172324'),skyB=new T.Color('#030609');
-  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ceremony,animateBoxer,belt,crowd,display,confetti,badge,card,flashes,
+  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,impactTarget,ceremony,animateBoxer,poseArms,belt,crowd,display,confetti,badge,card,flashes,
     gate:arena.getObjectByName('Gate'),doors:[arena.getObjectByName('DoorL'),arena.getObjectByName('DoorR')],
     light(mix){key.intensity=2.8*(1-mix);ambient.intensity=2.1*(1-mix)+.035*mix;rim.intensity=1.9*(1-mix);
       ambient.color.copy(lightColor.copy(warm).lerp(cold,mix));world.background?.copy(skyA).lerp(skyB,mix);if(world.fog)world.fog.color.copy(world.background);

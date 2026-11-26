@@ -45,7 +45,7 @@ def animate_guard(rig,scene):
         parent_rotation[name]=rotation
 
     clips={'GuardFootwork':48,'StepIn':21,'StepOut':22,'CircleLeft':24,'CircleRight':24,
-           'Weave':29,'LeadStraight':34,'RearCross':34,'LeadArc':34}
+           'Weave':29,'LeadStraight':34,'RearCross':34,'LeadArc':34,'ReactJab':10,'ReactUppercut':15}
     stride={'StepIn':(0,.58),'StepOut':(0,-.53),'CircleLeft':(-.52,0),'CircleRight':(.52,0)}
     for name,frames in clips.items():
         action=bpy.data.actions.new(name)
@@ -55,6 +55,9 @@ def animate_guard(rig,scene):
             t=frame/frames;wave=2*pi*t
             attack=name in ('LeadStraight','RearCross','LeadArc')
             active=1 if name=='RearCross' else -1
+            impact=ease(t/.21)*(1-ease((t-.24)/.76))
+            jab=impact if name=='ReactJab' else 0
+            uppercut=impact if name=='ReactUppercut' else 0
             load=ease(t/.34)*(1-ease((t-.36)/.22)) if attack else 0
             reach=ease((t-.38)/.265)*(1-ease((t-.665)/.31)) if attack else 0
             shift=sin(wave);bob=.5-.5*cos(2*wave)
@@ -62,18 +65,19 @@ def animate_guard(rig,scene):
             moving=name in stride
             hip=ring(.036*shift+.083*weave-active*.035*load,
                      -.074-.025*bob-.075*abs(weave)-.024*load,
-                     .025+.018*cos(wave)+.065*reach-.038*load)
+                     .025+.018*cos(wave)+.065*reach-.038*load-.080*uppercut-.025*jab)
             root=joints['Root']
             root.location=orientation['Root'].inverted()@hip
             root.keyframe_insert(data_path='location',frame=frame,group='Root')
             pelvis=angles(-.05,-.14+.075*shift+active*(.17*load-.32*reach),.055*shift)
             aim('Root',pelvis)
-            torso=angles(.13+.06*bob+.11*abs(weave)+.11*reach,
-                         -.32+.16*shift+active*(.36*load-.64*reach),
+            torso=angles(.13+.06*bob+.11*abs(weave)+.11*reach-.30*uppercut,
+                         -.32+.16*shift+active*(.36*load-.64*reach)+.27*jab,
                          -.11*shift-.20*weave+active*.09*reach)
             aim('Chest',torso)
-            aim('Head',angles(.085+.045*bob,-.03+.06*shift,-.045*shift-.12*weave))
+            aim('Head',angles(.085+.045*bob-.40*uppercut,-.03+.06*shift+.41*jab,-.045*shift-.12*weave+.14*jab))
             chest=bind['Root']+hip+pelvis@(bind['Chest']-bind['Root'])
+            neck=chest+torso@(bind['Head']-bind['Chest'])
             for side,sign in [('L',-1),('R',1)]:
                 u,l,f=['Thigh'+side,'Shin'+side,'Foot'+side]
                 thigh=bind['Root']+hip+pelvis@(bind[u]-bind['Root'])
@@ -92,16 +96,17 @@ def animate_guard(rig,scene):
                 u,l='Drive'+side,'Fore'+side
                 shoulder=chest+torso@(bind[u]-bind['Chest'])
                 elbow_to_wrist=ring(-sign*.38,.76,.53).normalized()*.267
-                hand=ring(sign*(.202+.028*shift),1.485+.030*sin(wave+sign)+(.02 if sign>0 else -.025),
-                          .215-sign*.038+.025*cos(wave+sign))+hip*.50
+                # Keep the padded knuckles in front of the moving face on the return, too.
+                hand=neck+ring(sign*(.232+.014*shift),-.11+.020*sin(wave+sign),
+                               .245-sign*.020+.018*cos(wave+sign))
                 if attack and sign==active:
-                    hand+=ring(sign*.048,.024,-.088)*load
+                    hand+=ring(sign*.045,.015,-.019)*load
                     goal=ring(sign*.075,1.54,.62)
                     if name=='LeadArc':
                         goal=ring(-sign*.045,1.54,.44)
                         hand.x+=sign*.19*sin(pi*reach)
                     hand=hand.lerp(goal,reach)
-                else:hand+=ring(.053*weave,.05*load-.025*abs(weave),-.038*reach)
+                else:hand+=ring(.018*weave+.028*sign*uppercut,.024*load-.06*uppercut,.023*reach)
                 elbow=bend(shoulder,hand,ring(sign*(.65+reach*(1 if name=='LeadArc' else .14)),-1,-.18),
                            (bind[l]-bind[u]).length,elbow_to_wrist.length)
                 aim(u,(bind[l]-bind[u]).rotation_difference(elbow-shoulder))

@@ -95,4 +95,4 @@ def championship_belt(geometry, scene):
         plate([((x-90)*.00068,.021+(70-y)*.00064) for x,y in outline],mat,.039,.006,.018)
     legend("FAIR PLAY",.091,.022,.101)
     legend("CAMPEÓN",-.051,.030,.149)
-    plate(star(0,-.090,.013),"edge",.039,.006)
+    legend("MUNDIAL",-.087,.018,.090)
