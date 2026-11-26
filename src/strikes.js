@@ -1,9 +1,9 @@
 const T=AFRAME.THREE;
 // Offsets from the player's resting glove, ordered by time in seconds.
 const moves={
-  jab:{contact:.145,recovery:.30,range:1.65,
+  jab:{contact:.145,recovery:.56,range:1.65,
     keys:[[0,0,0,0,0],[.055,.018,.04,-.07,.12],[.145,-.115,.17,-.61,1],[.19,-.10,.15,-.54,.90],[.34,0,0,0,0]]},
-  uppercut:{contact:.245,recovery:.44,range:1.42,
+  uppercut:{contact:.245,recovery:.76,range:1.42,
     keys:[[0,0,0,0,0],[.085,.046,-.105,.025,.24],[.17,.005,-.035,-.22,.57],
           [.245,-.145,.27,-.40,1],[.30,-.14,.29,-.37,.94],[.50,0,0,0,0]]}
 };

@@ -10,7 +10,7 @@ const round=38,cardTime=8.5,lessonTime=6;
 const lessons=[
   [['Mouse','Mirá alrededor del estadio'],['Mirá alrededor','Girando la cabeza podés explorar el estadio']],
   [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá dar unos pasos por el túnel']],
-  [['Clic izquierdo / derecho','Jab recto con el izquierdo · Uppercut ascendente con el derecho'],['Jab / Uppercut','Mové el guante al frente o hacia arriba. Gatillos: izq. jab · der. uppercut']],
+  [['Clic izquierdo / derecho','Izquierdo: jab · Derecho: uppercut. Combiná dos y recuperá.'],['Jab / Uppercut','Al frente o hacia arriba. Gatillos izq./der. Combiná dos y recuperá.']],
   [['Espacio','Mantenelo apretado para subir la guardia'],['Agarre','Mantenelo apretado o acercá los guantes a la cara']],
   [['P','Pausá la partida cuando lo necesites'],['Esquivá con el cuerpo','Cuando el rival cargue el golpe, inclinate o agachate']]
 ];
@@ -26,6 +26,8 @@ let hits=0,blocks=0,attempt=-1,lastPunch=-1,lastCard=-1,noticeUntil=0;
 let attacks=[null,null],lastType='jab',musicStarted=false,gestureReady=[false,false], axis=[0,0], snapReady=true, lastHit=-10, boardState='';
 let head,forward,target,handPos,prevHands,velocity,headOrientation,offset,authoredQ,controllerQ,localHand;
 let guardBlend=0,gripBlend=0,knuckle,delta;
+let nextPunchAt=0,answerWeaveAt=-10;
+const gestureArmed=[true,true];
 function facePoint(i,out){
   out.set(i?.035:-.035,.097,.105);return w.impactTarget.localToWorld(out);
 }
@@ -62,7 +64,7 @@ function transition(n){
   if(n===0){
     musicStarted=false;sound.stopScore();sound.setApplause(null);guardBlend=gripBlend=0;gestureReady=[false,false];
     entranceApplauded=false;w.display.reset();w.card.darken(0);
-    hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;
+    hits=blocks=dodges=0;nextPunchAt=0;answerWeaveAt=-10;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
     w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.opponent.rotation.set(0,0,0);w.ceremony.reset();
@@ -72,7 +74,7 @@ function transition(n){
     if(!entranceApplauded){sound.setApplause('entry');entranceApplauded=true;}
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5);
     w.rig.position.set(0,0,1.05);w.opponent.position.set(0,0,-.2);w.gate.visible=true;
-    lastPunch=-1;attacks=[null,null];sound.ambience(.41);sound.bell();w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL','El cinturón está en juego','Jab · Uppercut · Bloqueo');
+    lastPunch=-1;nextPunchAt=0;answerWeaveAt=-10;gestureArmed.fill(true);attacks=[null,null];sound.ambience(.41);sound.bell();w.display.set('TÍTULO MUNDIAL   /   ROUND FINAL','El cinturón está en juego','Jab · Uppercut · Bloqueo');
     tell('Round final por el título mundial',3);
   }else if(n===2){
     w.display.set('DECISIÓN DEL JURADO','¡Campeón del mundo!','El cinturón mundial es tuyo');sound.bell();sound.ambience(.44);sound.setApplause('title');
@@ -128,32 +130,48 @@ function clearsStrike(position){
   relativeHead.addScaledVector(strikeAxis,-fraction);
   return relativeHead.lengthSq()>.18*.18;
 }
+// Normalized position in one side-to-side evasion, shared by the animation and hit test.
+function weaveProgress(){
+  const phase=time%3.4,cycle=Math.floor(time/3.4);
+  if((phase>=1.55&&phase<2.97)||time-lastHit<(lastType==='jab'?.34:.51))return -1;
+  const reply=(time-answerWeaveAt)/.85;
+  if(reply>=0&&reply<1)return reply;
+  return cycle%3===1&&phase<1?phase:-1;
+}
 function connect(i,kind,physical,contactDistance=0){
   const reach=strikes[kind].range;
   viewerPosition(head);facePoint(i,target);
   w.scene.camera.getWorldDirection(forward);
+  const weave=weaveProgress();
+  if(weave>.18&&weave<.82){
+    // A tracked glove can still catch the moving head if the player follows it precisely.
+    if(!physical||w.hands[i].object3D.getWorldPosition(handPos).distanceTo(target)>.17)return;
+  }
   const range=target.distanceTo(head),aim=target.sub(head).normalize().dot(forward);
   if(!physical&&(contactDistance>.175||range>reach+.04||aim<.72)){
     tell(range>reach?'Acercate un paso':aim<.72?'Mirá al rival':'El golpe pasó de largo',.55);return;
   }
   hits++;lastHit=time;lastType=kind;
+  if(attacks[i].endsCombo)answerWeaveAt=time+(kind==='jab'?.34:.51);
   const phase=time%3.4;
   if(phase>=1.55&&phase<2.48)attempt=Math.floor(time/3.4);
   sound.contact(false,kind);updateStats();
   w.hands[i].components['tracked-controls']?.controller?.gamepad?.hapticActuators?.[0]?.pulse(kind==='jab'?.22:.37,65);
 }
 function punch(i,kind,physical=false){
-  if(!running||paused||stage>1||stage<0||time-lastPunch<.22)return;
+  if(!running||paused||stage>1||stage<0||time<nextPunchAt)return;
   const previous=attacks[i];
   if(previous&&time-previous.start<strikes[previous.kind].recovery)return;
+  const endsCombo=time-lastPunch<.80;
+  nextPunchAt=time+(endsCombo?.94:.35);
   lastPunch=time;
   let goal=null;
   if(stage===1&&!physical){
     facePoint(i,target);viewerPosition(head);w.scene.camera.getWorldDirection(forward);
     delta.subVectors(target,head);
-    if(delta.length()<=strikes[kind].range&&delta.normalize().dot(forward)>.75)goal=target.clone();
+    if(delta.length()<=strikes[kind].range&&delta.normalize().dot(forward)>.75&&weaveProgress()<0)goal=target.clone();
   }
-  attacks[i]={start:time,kind,goal,physical,resolved:physical||stage===0};
+  attacks[i]={start:time,kind,goal,physical,endsCombo,resolved:physical||stage===0};
   if(physical&&stage===1)connect(i,kind,true);
 }
 function guard(){
@@ -255,7 +273,7 @@ function tick(dt){
     const p=viewerPosition(head),o=w.opponent.position;
     let dx=p.x-o.x,dz=p.z-o.z;const dist=Math.hypot(dx,dz)||.001;
     const committing=phase>=1.55&&phase<2.97;
-    const slipping=!committing&&phase<1.0&&cycle%3===1&&dist<1.55;
+    const weave=weaveProgress(),slipping=weave>=0;
     // Approach from outside, change angle beside the player, then step back to reset.
     const desiredRange=phase>=2.97?1.40:1.04;
     const radial=committing||slipping?0:clamp((dist-desiredRange)*1.85,-.68,1.14);
@@ -278,7 +296,7 @@ function tick(dt){
       motion=cycle%2?'RearCross':cycle%4===2?'LeadArc':'LeadStraight';
       strikeTime=clamp((phase-1.55)/1.42,0,1);
     }else if(slipping){
-      motion='Weave';
+      motion='Weave';strikeTime=(cycle%2?.5:0)+weave*.5;
     }else if(Math.abs(radial)>Math.abs(lateral)){
       motion=radial>0?'StepIn':'StepOut';pace=clamp(Math.abs(radial)/.64,.55,1.65);
     }else{
@@ -295,16 +313,19 @@ function tick(dt){
       else{tell('El rival conecta',.8);sound.contact();}updateStats();
     }
     if(immersive){
-      w.impactTarget.getWorldPosition(target);
       for(let j=0;j<2;j++){
+        w.impactTarget.getWorldPosition(target);
         w.hands[j].object3D.getWorldPosition(handPos);
+        const separation=handPos.distanceTo(target);
+        if(separation>.43)gestureArmed[j]=true;
         localHand.copy(handPos);w.rig.worldToLocal(localHand);
         if(gestureReady[j]){
           velocity.copy(localHand).sub(prevHands[j]).divideScalar(Math.max(.008,dt)).applyQuaternion(w.rig.quaternion);
           const speed=velocity.length(),toward=forward.subVectors(target,handPos).normalize();
           const rising=velocity.y>.74&&velocity.y>Math.hypot(velocity.x,velocity.z)*.82;
-          if(speed>.95&&speed<10&&handPos.distanceTo(target)<.38&&velocity.dot(toward)>.20)
-            punch(j,rising?'uppercut':'jab',true);
+          if(gestureArmed[j]&&speed>.95&&speed<10&&separation<.38&&velocity.dot(toward)>.20){
+            gestureArmed[j]=false;punch(j,rising?'uppercut':'jab',true);
+          }
         }
         prevHands[j].copy(localHand);gestureReady[j]=true;
       }
