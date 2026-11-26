@@ -97,7 +97,8 @@ def export(name):
     make_objects()
     bpy.ops.object.select_all(action='DESELECT')
     for obj in roots: obj.select_set(True)
-    bpy.ops.export_scene.gltf(filepath=str(OUT/(name+".glb")),export_format="GLB",use_selection=True,use_active_scene=True,export_yup=True)
+    bpy.ops.export_scene.gltf(filepath=str(OUT/(name+".glb")),export_format="GLB",use_selection=True,use_active_scene=True,export_yup=True,
+        export_animation_mode="ACTIVE_ACTIONS",export_nla_strips_merged_animation_name="GuardFootwork",export_frame_range=False)
     exports[name] = list(roots)
     for obj in roots: obj.hide_set(True)
     roots.clear(); pieces.clear()
@@ -108,56 +109,70 @@ def contour(g, mat, points, radius):
         bar(g, mat, a, b, radius, 7)
 
 
-def muscle(g, mat, start, end, profile):
-    """Continuous tapered cross sections along the resting pose of a limb."""
-    a,b=Vector(start),Vector(end)
-    direction=(b-a).normalized()
-    side=direction.cross(Vector((0,0,1))).normalized()
-    depth=direction.cross(side)
-    points=[]; n=18
-    for t,width,thickness in profile:
-        center=a.lerp(b,t)
-        for i in range(n):
-            ang=2*pi*i/n
-            points.append(tuple(center+side*(width*cos(ang))+depth*(thickness*sin(ang))))
-    faces=[tuple(range(n)),tuple(range(len(points)-n,len(points)))]
-    for k in range(len(profile)-1):
-        for i in range(n):
-            j=(i+1)%n
-            faces.append((k*n+i,k*n+j,(k+1)*n+j,(k+1)*n+i))
-    geometry(g,mat,points,faces,True)
-
-
 def glove(g,x,y,z,color,side=1):
-    def shell(mat,rows):
-        loft(g,mat,[(x+side*dx,y+h,z+dz,a,b) for h,dx,dz,a,b in rows],28)
-    shell("black",[(-.153,0,-.016,.06,.057),(-.145,0,-.016,.077,.068),
-                   (-.055,0,-.012,.089,.075),(-.03,0,0,.083,.07)])
-    shell(color,[(-.14,0,-.016,.08,.069),(-.132,0,-.016,.083,.071),
-                 (-.063,0,-.012,.092,.077),(-.055,0,-.012,.091,.076)])
-    for h,r in [(-.136,.083),(-.064,.092)]:
-        shell("thread",[(h,0,-.014,r,.074),(h+.003,0,-.014,r+.0005,.074)])
-    shell(color,[(-.065,0,-.014,.071,.064),(-.038,.004,-.012,.085,.074),
-                 (.004,.012,-.002,.097,.084),(.055,.015,.006,.105,.091),
-                 (.102,.013,.012,.106,.087),(.135,.009,.013,.096,.077),
-                 (.154,.008,.015,.077,.064),(.165,.005,.014,.044,.04),(.168,.004,.013,.012,.015)])
-    # Attached, curved thumb and welt on both sides of the palm.
-    thumb=(x-side*.066,y-.018,z+.008)
-    muscle(g,color,thumb,(x-side*.082,y+.078,z+.063),
-           [(0,.025,.028),(.20,.043,.039),(.55,.046,.042),(.79,.035,.034),(1,.016,.018)])
-    for face in (-1,1):
-        contour(g,"trim",[(x-side*.069,y-.035,z+face*.043),(x-side*.071,y+.011,z+face*.061),
-                          (x-side*.051,y+.045,z+face*.078),(x-side*.022,y+.062,z+face*.085)],.0025)
-        # Sewn cuff patch with twin diagonal stitch marks.
-        box(g,"black",x,y-.098,z-.014+face*.073,.067,.043,.005)
-        for j in (-.008,.008):
-            bar(g,"thread",(x+j-.008,y-.110,z-.014+face*.077),(x+j+.008,y-.087,z-.014+face*.077),.0025,6)
+    # Sculpted cross sections, broad over the knuckles and tapered into the wrist.
+    # Front is the back of the fist. The tucked fingers and thumb meet on the palm.
+    def pad(mat,rows,power=.83):
+        rings=[]
+        for i in range(len(rows)-1):
+            a,b,c,d=[rows[max(0,min(len(rows)-1,j))] for j in (i-1,i,i+1,i+2)]
+            for step in range(3):
+                t=step/3
+                rings.append([.5*((2*q)+(-p+r)*t+(2*p-5*q+4*r-s)*t*t+(-p+3*q-3*r+s)*t**3)
+                              for p,q,r,s in zip(a,b,c,d)])
+        rings.append(rows[-1])
+        points=[];n=32
+        for h,dx,dz,width,depth in rings:
+            for j in range(n):
+                a=2*pi*j/n;u,v=cos(a),sin(a)
+                points.append((x+side*(dx+width*(1 if u>=0 else -1)*abs(u)**power),
+                               y+h,z+dz+depth*(1 if v>=0 else -1)*abs(v)**power))
+        faces=[tuple(reversed(range(n))),tuple(range(len(points)-n,len(points)))]
+        for i in range(len(rings)-1):
+            for j in range(n):
+                a=i*n+j;b=i*n+(j+1)%n;faces.append((a,b,b+n,a+n))
+        geometry(g,mat,points,faces,True)
+    pad("black",[(-.139,0,0,.055,.046),(-.134,0,0,.063,.053),(-.054,0,0,.070,.055)])
+    pad(color,[(-.134,0,.001,.062,.051),(-.127,0,.001,.066,.056),(-.079,.002,.002,.073,.060),
+               (-.049,.003,.004,.077,.059),(-.045,.003,.006,.073,.054)],.76)
+    pad("trim",[(-.129,0,.001,.065,.055),(-.126,0,.001,.067,.057),(-.123,0,.001,.066,.056)])
+    pad(color,[(-.072,.002,.007,.060,.045),(-.041,.005,.012,.073,.054),(.008,.009,.014,.081,.065),
+               (.066,.012,.014,.089,.073),(.105,.011,.009,.093,.079),(.129,.009,-.003,.088,.078),
+               (.150,.007,-.012,.070,.062),(.161,.004,-.014,.037,.031),(.163,.003,-.014,.009,.008)])
+    pad(color,[(.002,.008,-.033,.046,.020),(.017,.009,-.042,.066,.026),(.038,.010,-.049,.073,.028),
+               (.062,.010,-.053,.077,.027),(.079,.012,-.052,.071,.023),(.083,.010,-.051,.055,.010)])
+    pad(color,[(-.053,-.047,-.008,.023,.020),(-.029,-.068,-.016,.035,.029),
+               (.007,-.079,-.030,.037,.033),(.036,-.075,-.046,.034,.031),
+               (.054,-.063,-.057,.027,.025),(.064,-.047,-.059,.012,.014)],.93)
+    def line(mat,points,r):
+        contour(g,mat,[(x+side*a,y+b,z+c) for a,b,c in points],r)
+    line("trim",[(-.096,-.003,-.033),(-.098,.018,-.043),(-.085,.041,-.061),(-.063,.056,-.073),(-.046,.061,-.070)],.0022)
+    line("trim",[(-.051,.019,-.060),(-.028,.012,-.065),(.006,.011,-.067),(.043,.014,-.066),(.064,.021,-.060)],.002)
+    # Raised wrap strap, double stitching and the angular FairPlay monogram.
+    for h in (-.114,-.072):
+        line("thread",[(-.059,h,.042),(-.035,h,.055),(0,h,.060),(.036,h,.056),(.062,h,.040)],.0014)
+    for outline in [[(-.021,-.098),(-.008,-.077),(.021,-.077),(.014,-.084),(-.004,-.084)],
+                    [(-.022,-.110),(-.009,-.088),(.012,-.088),(.005,-.095),(-.007,-.095),(-.016,-.110)]]:
+        geometry(g,"paper",[(x+side*a,y+b,z+.062) for a,b in outline],[tuple(range(len(outline)))])
+
+def victory_arms():
+    # Reusable segments for the first-person belt lift. Local Y spans one unit;
+    # the browser fits them between the player's shoulder, elbow and glove cuff.
+    for group,rows in [
+        ("VictoryUpper",[(0,.059,.058),(.16,.069,.064),(.39,.073,.067),(.64,.061,.057),(.83,.048,.047),(1,.047,.046)]),
+        ("VictoryForearm",[(0,.047,.045),(.10,.052,.049),(.28,.058,.054),(.48,.053,.047),(.70,.043,.038),(.87,.035,.031),(1,.032,.031)])
+    ]:
+        loft(group,"skin",[(0,y,0,w,h) for y,w,h in rows],24)
+    loft("VictoryForearm","paper",[(0,.79,0,.041,.037),(0,.82,0,.042,.038),(0,1.02,0,.036,.034)],24)
+    for h in (.84,.88,.92,.96):
+        loft("VictoryForearm","linen",[(0,h,0,.0415-(h-.84)*.025,.0378-(h-.84)*.022),
+                                        (0,h+.008,0,.0414-(h-.84)*.025,.0377-(h-.84)*.022)],24)
 
 
-def human(ref=False):
+def human():
     # The .blend contains the fitted MakeHuman assets, bound muscles and packed skin maps.
     # Append the whole rig hierarchy when rebuilding in a fresh Blender session.
-    name="referee" if ref else "opponent"
+    name="opponent"
     source=Path(__file__).with_name("FairPlay.blend")
     with bpy.data.libraries.load(str(source),link=False) as (data,loaded):
         loaded.collections=["Athletes / "+name]
@@ -198,8 +213,8 @@ def fan_details():
     oval("FanDetails","hair",0,.978,-.014,.13,.071,.13,8)
 
 
-human(); human(True)
-glove("Hand",0,0,0,"inkhide"); export("glove")
+human()
+glove("Hand",0,0,0,"inkhide"); victory_arms(); export("glove")
 belt_module = runpy.run_path(str(Path(__file__).with_name("belt.py")))
 belt_module["championship_belt"](geometry, scene)
 export("belt")
@@ -258,10 +273,11 @@ for name, objects in exports.items():
         obj.hide_set(False)
         collection.objects.link(obj)
         scene.collection.objects.unlink(obj)
-        if name=="referee" and not obj.parent: obj.location=(1.65,1.1,0)
-        elif name=="opponent" and not obj.parent: obj.location=(0,.45,0)
+        if name=="opponent" and not obj.parent: obj.location=(0,.45,0)
         elif name=="belt": obj.location=(1.1,-1.0,1.1)
-        elif name=="glove": obj.location=(-.5,-1.1,1.15)
+        elif name=="glove":
+            obj.location=(-.5,-1.1,1.15)
+            if obj.name.startswith("Victory"): obj.hide_set(True);obj.hide_render=True
         elif name=="spectator": obj.location=(8.4,0,-.58)
 for area in bpy.context.screen.areas:
     if area.type=="VIEW_3D":

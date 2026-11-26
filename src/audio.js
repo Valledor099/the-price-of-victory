@@ -5,7 +5,7 @@ export class Sound {
   crowdLevel = 0;
 
   async prepare() {
-    const names = ['bell', 'crowd', 'murmur'];
+    const names = ['bell', 'crowd', 'murmur', 'ovation'];
     this.files = Object.fromEntries(await Promise.all(names.map(async name => {
       const response = await fetch('assets/' + name + '.mp3');
       if (!response.ok) throw Error('No se pudo cargar el sonido de ' + name);
@@ -23,6 +23,8 @@ export class Sound {
       this.master = ctx.createGain();
       this.master.gain.value = 0;
       this.bus.connect(limiter).connect(this.master).connect(ctx.destination);
+      this.cheerBus = ctx.createGain();
+      this.cheerBus.connect(this.bus);
       this.venue = ctx.createGain();
       this.venue.gain.value = 0;
       const distant = ctx.createBiquadFilter();
@@ -39,8 +41,13 @@ export class Sound {
 
   async loadSamples() {
     const ctx = this.ctx;
-    const [bell, crowd, murmur] = await Promise.all(['bell','crowd','murmur'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
+    const [bell, crowd, murmur, ovation] = await Promise.all(['bell','crowd','murmur','ovation'].map(key => ctx.decodeAudioData(this.files[key].slice(0))));
     this.bellBuffer = bell;
+    this.ovation=ovation;
+    const peakWindow=ovation.getChannelData(0);
+    let sum=0;
+    for(const sample of peakWindow)sum+=sample*sample;
+    this.cheerGain=Math.min(5,.29/Math.max(.01,Math.sqrt(sum/peakWindow.length)));
     // Skip leading recording silence so the strike lands on the round boundary.
     const data = bell.getChannelData(0);
     let first = 0;
@@ -85,9 +92,42 @@ export class Sound {
     this.crowdLevel = level;
     if (!this.venue) return;
     const gain = this.venue.gain, now=this.ctx.currentTime;
+    this.cheerBus.gain.cancelScheduledValues(now);
+    this.cheerBus.gain.setTargetAtTime(level===0?0:1,now,.012);
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(gain.value,now);
     gain.linearRampToValueAtTime(level,now+(level===0 ? .04 : .6));
+  }
+
+  cheer(victory=false) {
+    if(!this.ovation)return;
+    const ctx=this.ctx,now=ctx.currentTime,source=ctx.createBufferSource(),gain=ctx.createGain();
+    source.buffer=this.ovation;
+    const length=victory?4.85:3.25,peak=this.cheerGain*(victory?1.08:.88);
+    gain.gain.setValueAtTime(0,now);
+    gain.gain.linearRampToValueAtTime(peak,now+.18);
+    gain.gain.setValueAtTime(peak*.9,now+length*.60);
+    gain.gain.exponentialRampToValueAtTime(.001,now+length);
+    source.connect(gain).connect(this.cheerBus);
+    source.start(now,victory?0:.55,length);
+    source.onended=()=>{source.disconnect();gain.disconnect();};
+  }
+
+  screensOn() {
+    if(!this.foley)return;
+    const ctx=this.ctx,now=ctx.currentTime;
+    const relay=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),tap=ctx.createGain();
+    relay.buffer=this.foley;filter.type='bandpass';filter.frequency.value=940;filter.Q.value=.85;
+    tap.gain.setValueAtTime(.32,now);tap.gain.exponentialRampToValueAtTime(.001,now+.065);
+    relay.connect(filter).connect(tap).connect(this.bus);relay.start(now,0,.07);
+    relay.onended=()=>{relay.disconnect();filter.disconnect();tap.disconnect();};
+    const coil=ctx.createOscillator(),gain=ctx.createGain();
+    coil.type='triangle';coil.frequency.setValueAtTime(115,now+.045);
+    coil.frequency.exponentialRampToValueAtTime(430,now+.34);
+    gain.gain.setValueAtTime(.0001,now+.045);gain.gain.linearRampToValueAtTime(.17,now+.13);
+    gain.gain.exponentialRampToValueAtTime(.0001,now+.68);
+    coil.connect(gain).connect(this.bus);coil.start(now+.045);coil.stop(now+.68);
+    coil.onended=()=>{coil.disconnect();gain.disconnect();};
   }
 
   bell() {

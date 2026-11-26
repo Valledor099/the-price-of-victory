@@ -5,7 +5,7 @@ import {Sound} from './audio.js';
 const $=s=>document.querySelector(s), T=globalThis.AFRAME?.THREE;
 const sound=new Sound(), keys=new Set(), grips=new Set();
 const names=['La entrada','El combate','La victoria','El silencio','Lo que no viste','Reflexión final'];
-const round=38,cardTime=12,lessonTime=6;
+const round=38,cardTime=8.5,lessonTime=6;
 const lessons=[
   [['Mouse','Mirá alrededor del estadio'],['Mirá alrededor','Girando la cabeza podés explorar el estadio']],
   [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá dar unos pasos por el túnel']],
@@ -18,6 +18,7 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=n=>{n=clamp(n,0,1);return n*n*(3-2*n);};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
+let entranceCheered=false;
 let dodges=0,lockedCycle=-1;
 let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
 let hits=0,blocks=0,attempt=-1,lastPunch=-1,activeHand=0,lastCard=-1,noticeUntil=0,finStep=-1;
@@ -48,24 +49,26 @@ function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   if(n===0){
+    entranceCheered=false;w.card.darken(0);
     hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
-    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.ref.position.set(1.58,0,-1.45);w.ref.rotation.y=-.45;w.ref.visible=true;w.ceremony.reset();
+    w.opponent.position.set(0,0,-.26);w.opponent.visible=true;w.opponent.rotation.set(0,0,0);w.ceremony.reset();
     w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   FINAL','The Price of Victory','Ingresá al ring');
     sound.ambience(.23);
   }else if(n===1){
+    if(!entranceCheered){sound.cheer();entranceCheered=true;}
     w.rig.position.set(0,0,1.05);w.opponent.position.set(0,0,-.2);w.gate.visible=true;
     lastPunch=-1;attacks=[-10,-10];sound.ambience(.31);sound.bell();w.display.set('ROUND 01','La gran final','Gatillo o clic para golpear · Agarre o espacio para bloquear');
     tell('Acercate al rival · Clic para golpear · Espacio para bloquear',4);
   }else if(n===2){
-    w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.55);
+    w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.44);sound.cheer(true);
     w.opponent.visible=false;w.confetti.visible=!reduced;w.belt.visible=true;
     w.scene.camera.getWorldDirection(forward);w.ceremony.start(viewerPosition(head),forward);
-    tell('El árbitro levanta tu mano derecha',4);
+    tell('Levantás el cinturón de campeón',3);
   }else if(n===3){
-    w.ceremony.letGo();w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.ref.visible=false;w.confetti.visible=false;
-    sound.ambience(0);w.display.off();w.light(1);
+    w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.confetti.visible=false;
+    sound.ambience(0);w.display.off();w.light(1);w.card.darken(.80);
     w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
   }else if(n===5){w.display.off();finStep=-1;}
@@ -138,16 +141,18 @@ function tick(dt){
   w.flashes.tick(dt,stage,reduced);
   const blocked=stage<=1&&guard();
   for(let i=0;i<2;i++){
-    const tracked=i===0||(stage!==2&&!(stage===3&&time<.9));
+    const tracked=stage!==2&&!(stage===3&&time<.85);
     w.desk[i].visible=!immersive&&tracked;w.xr[i].visible=immersive&&tracked;
     const sign=i===0?-1:1,age=time-attacks[i],extend=stage<=1&&age>=0&&age<.32?Math.sin(age/.32*Math.PI):0;
     w.desk[i].position.set(sign*(blocked?.13:.245),-.29+(blocked?.18:0),-.44-.43*extend);
     w.desk[i].rotation.x=-.43-.49*extend;w.xr[i].rotation.x=-.8;
   }
   if(stage===0){
+    w.animateBoxer(dt,0,0,0,0,.80);
     const opening=smooth((time-1.5)/3);
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5*opening);
     move(dt);
+    if(!entranceCheered&&w.rig.position.z<7.75){sound.cheer();entranceCheered=true;}
     if(time<invitation){
       const index=Math.floor(time/lessonTime),local=time%lessonTime;
       const alpha=Math.min(smooth(local/.65),smooth((lessonTime-local)/.85));
@@ -171,8 +176,10 @@ function tick(dt){
     let dx=p.x-o.x,dz=p.z-o.z;const dist=Math.hypot(dx,dz)||.001;
     const committing=phase>=1.55&&phase<2.81;
     const speed=committing?0:clamp(dist-1.13,-.9,1.1)*dt;
-    o.x=clamp(o.x+dx/dist*speed+(committing?0:Math.cos(time*2.1)*dt*.16),-2.6,2.6);o.z=clamp(o.z+dz/dist*speed,-2.6,2.6);
-    if(!committing||lockedCycle!==cycle)w.opponent.rotation.y=Math.atan2(dx,dz);o.y=.025*Math.sin(time*5);
+    const circle=committing?0:Math.sin(time*1.65)*dt*.34;
+    o.x=clamp(o.x+dx/dist*speed+dz/dist*circle,-2.6,2.6);
+    o.z=clamp(o.z+dz/dist*speed-dx/dist*circle,-2.6,2.6);
+    if(!committing||lockedCycle!==cycle)w.opponent.rotation.y=Math.atan2(dx,dz);o.y=0;
     const reaction=clamp((time-lastHit)/.32,0,1);
     w.opponent.rotation.x=-.13*Math.sin(reaction*Math.PI);
     if(phase>=1.55&&lockedCycle!==cycle){
@@ -184,10 +191,7 @@ function tick(dt){
     }
     const swing=phase>2.15&&phase<2.81?Math.sin((phase-2.15)/.66*Math.PI):0;
     const windup=phase>=1.55&&phase<2.15?Math.sin((phase-1.55)/.6*Math.PI):0;
-    w.fists.forEach((arm,n)=>{
-      arm.upper(n===i ? windup*.22-swing*1.15 : .035*Math.sin(time*4));
-      arm.fore(n===i ? swing*1.87-windup*.26 : 0);
-    });
+    w.animateBoxer(dt,i,windup,swing,Math.sin(reaction*Math.PI),committing?.86:1.13);
     if(phase>1.55&&phase<2.14)tell('El rival prepara un golpe',.32);
     if(phase>=2.48&&attempt!==cycle){attempt=cycle;
       if(clearsStrike(head)){dodges++;tell('Esquivaste',.8);}
@@ -212,24 +216,26 @@ function tick(dt){
     if(time>=round)transition(2);
   }else if(stage===2||stage===3){
     if(stage===2){
-      w.scene.camera.getWorldDirection(forward);w.ceremony.tick(time,viewerPosition(head),forward);w.confetti.position.y=-((time*.45)%1.5);
+      w.ceremony.tick(time);w.confetti.position.y=-((time*.45)%1.5);
       if(time>=8)transition(3);
     }else{
+      w.ceremony.tick(time,true);
       if(time<4)w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',smooth((4-time)/.8),'question');
       else w.card.hide();
       if(time>=11.5)transition(4);
     }
   }else if(stage===4){
+    w.card.darken(.80*(1-smooth(time/.55)));
     const i=Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
-    if(i!==lastCard){const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
+    if(i!==lastCard){if(i===0)sound.screensOn();const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
   }else if(stage===5){
     if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','The Price of Victory');w.badge.visible=true;}
     if(time>=9)finish();
   }
-  if(w.belt.visible&&stage!==2){
-    const cam=w.scene.camera;cam.getWorldPosition(head);cam.getWorldQuaternion(headOrientation);
-    w.ceremony.carry(immersive?w.xr[1]:w.desk[1],stage===3?time:1);
-    if(w.badge.visible){w.badge.position.copy(head).add(target.set(0,.17,-2.7).applyQuaternion(headOrientation));w.badge.quaternion.copy(headOrientation);}
+  if(w.badge.visible){
+    viewerPosition(head);w.scene.camera.getWorldQuaternion(headOrientation);
+    w.badge.position.copy(head).add(target.set(0,.17,-2.7).applyQuaternion(headOrientation));
+    w.badge.quaternion.copy(headOrientation);
   }
 }
 function bind(){

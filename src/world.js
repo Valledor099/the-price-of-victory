@@ -16,12 +16,26 @@ function model(parent,name){
     el.setAttribute('gltf-model','url(assets/'+name+'.glb)');parent.append(el);
   });
 }
-function joint(model,name) {
-  const bone=model.getObjectByName(name);
-  if(!bone?.isBone)throw Error('Falta la articulación '+name);
-  const rest=bone.quaternion.clone(),delta=new T.Quaternion();
-  const x=new T.Vector3(1,0,0),z=new T.Vector3(0,0,1);
-  return (angle,sideways=false)=>bone.quaternion.copy(rest).multiply(delta.setFromAxisAngle(sideways?z:x,angle));
+function boxerMotion(model){
+  const mixer=new T.AnimationMixer(model);
+  const clip=model.animations.find(a=>a.name==='GuardFootwork')||model.animations[0];
+  const guard=mixer.clipAction(clip);guard.play();
+  const upper=['L','R'].map(s=>model.getObjectByName('Drive'+s));
+  const fore=['L','R'].map(s=>model.getObjectByName('Fore'+s));
+  const chest=model.getObjectByName('Chest'),head=model.getObjectByName('Head');
+  // Restore the keyed arm pose before advancing the mixer and adding this strike.
+  const layered=[chest,head,...upper,...fore],base=layered.map(b=>b.quaternion.clone());
+  return (dt,side=0,load=0,reach=0,hit=0,pace=1)=>{
+    layered.forEach((b,i)=>b.quaternion.copy(base[i]));
+    mixer.update(dt*pace);
+    layered.forEach((b,i)=>base[i].copy(b.quaternion));
+    const sign=side===0?1:-1;
+    chest.rotateY(sign*(.26*load-.46*reach));chest.rotateX(.10*reach-.20*hit);
+    head.rotateY(sign*(.15*reach-.10*load));head.rotateZ(.14*hit*sign);
+    upper[side].rotateX(.25*load-1.48*reach);upper[side].rotateY(sign*.22*reach);
+    fore[side].rotateX(2.10*reach-.25*load);
+    upper[1-side].rotateX(-.17*(load+reach));fore[1-side].rotateX(-.15*reach);
+  };
 }
 export async function createWorld(tick) {
   AFRAME.registerComponent('match-loop',{tick(t,dt){if(dt)tick(Math.min(dt/1000,.12));}});
@@ -36,20 +50,21 @@ export async function createWorld(tick) {
   const hands=['left','right'].map(hand=>entity('a-entity',rig,{'laser-controls':'hand:'+hand,'raycaster':'enabled:false','line':'visible:false'}));
   document.querySelector('#game').append(scene);
   if(!scene.hasLoaded)await new Promise(resolve=>scene.addEventListener('loaded',resolve,{once:true}));
-  const [arena,opponent,ref,glove,belt]=await Promise.all(['arena','opponent','referee','glove','belt'].map(n=>model(scene,n)));
+  const [arena,opponent,glove,belt]=await Promise.all(['arena','opponent','glove','belt'].map(n=>model(scene,n)));
   const world=scene.object3D;
   const ribbon=arena.getObjectByName('Ribbon');
   const ambient=new T.HemisphereLight(0xffecdb,0x6b7471,2.1), key=new T.DirectionalLight(0xffdbad,2.8),rim=new T.DirectionalLight(0x97d7ee,1.9);
   key.position.set(3,7,4);rim.position.set(-4,4,-3);world.add(ambient,key,rim);
   const crowd=crowdFromStands();world.add(crowd);glove.visible=false;belt.visible=false;
+  const armParts=['VictoryUpper','VictoryForearm'].map(name=>glove.getObjectByName(name).removeFromParent());
   const attachGlove=(parent,i)=>{
     const g=glove.clone(true);g.visible=true;g.scale.x=i?1:-1;parent.add(g);g.rotation.set(-.36,0,i?-.14:.14);return g;
   };
   const desk=[0,1].map(i=>attachGlove(camera.object3D,i));
   const xr=hands.map((hand,i)=>attachGlove(hand.object3D,i));
   for(const hand of hands)hand.addEventListener('controller-model-ready',()=>{const mesh=hand.getObject3D('mesh');if(mesh)mesh.visible=false;});
-  const ceremony=victoryCeremony(scene,rig.object3D,ref,glove,belt);
-  const fists=['L','R'].map(side=>({upper:joint(opponent,'Drive'+side),fore:joint(opponent,'Fore'+side)}));
+  const ceremony=victoryCeremony(scene,glove,belt,armParts);
+  const animateBoxer=boxerMotion(opponent);
   const display=await boards(world);
   const card=centerCard(scene.camera),flashes=photographers(world);
   crowd.name='Afición';belt.name='Cinturón';
@@ -63,7 +78,7 @@ export async function createWorld(tick) {
   lamps?.traverse(n=>{if(n.isMesh)lampMats.push(...[n.material].flat());});
   const lightColor=new T.Color(),warm=new T.Color('#fff0d6'),cold=new T.Color('#809cae');
   const skyA=new T.Color('#172324'),skyB=new T.Color('#081119');
-  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ref,ceremony,fists,belt,crowd,display,confetti,badge,card,flashes,
+  return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ceremony,animateBoxer,belt,crowd,display,confetti,badge,card,flashes,
     gate:arena.getObjectByName('Gate'),doors:[arena.getObjectByName('DoorL'),arena.getObjectByName('DoorR')],
     light(mix){key.intensity=2.8-2.35*mix;ambient.intensity=2.1-1.15*mix;rim.intensity=1.9-1.3*mix;
       ambient.color.copy(lightColor.copy(warm).lerp(cold,mix));world.background?.copy(skyA).lerp(skyB,mix);if(world.fog)world.fog.color.copy(world.background);
