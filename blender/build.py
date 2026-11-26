@@ -98,7 +98,7 @@ def export(name):
     bpy.ops.object.select_all(action='DESELECT')
     for obj in roots: obj.select_set(True)
     bpy.ops.export_scene.gltf(filepath=str(OUT/(name+".glb")),export_format="GLB",use_selection=True,use_active_scene=True,export_yup=True,
-        export_animation_mode="ACTIVE_ACTIONS",export_nla_strips_merged_animation_name="GuardFootwork",export_frame_range=False)
+        export_animation_mode="NLA_TRACKS",export_frame_range=False)
     exports[name] = list(roots)
     for obj in roots: obj.hide_set(True)
     roots.clear(); pieces.clear()

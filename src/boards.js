@@ -18,15 +18,22 @@ export async function boards(world) {
   const group=new T.Group();group.name='Marcadores';
   const front=new T.MeshBasicMaterial({map:tex,toneMapped:false});
   const housing=new T.MeshBasicMaterial({color:0x192526});
+  const emitters=[],white=new T.Color('#d6e5ef'),tint=new T.Color();
+  const sample=document.createElement('canvas');sample.width=sample.height=1;
+  const sampler=sample.getContext('2d',{willReadFrequently:true});
   for(let n=0;n<4;n++){
     const a=n*Math.PI/2;
     const screen=new T.Mesh(new T.BoxGeometry(7.1,3.06,.13),[housing,housing,housing,housing,front,housing]);
     // South board hangs above the 3.16 m tunnel roof, on shorter hangers.
     screen.position.set(Math.sin(a)*8.2,n===2?5.02:3.32,-Math.cos(a)*8.2);
     screen.rotation.y=-a;group.add(screen);
+    const spill=new T.PointLight(white,0,15,2);spill.name='Luz de televisor';spill.visible=false;
+    spill.position.set(0,-.18,.52);screen.add(spill);emitters.push(spill);
   }
   world.add(group);
+  let brightness=7;
   return {
+    glow(level){for(const light of emitters){light.intensity=level*brightness;light.visible=level>0;}},
     set(label,headline,sub='',card=null) {
       group.visible=true;
       c.fillStyle=card?'#0b1b1e':'#132724';c.fillRect(0,0,1536,660);
@@ -43,7 +50,12 @@ export async function boards(world) {
         c.fillStyle='#f3eee2';c.font='bold 116px Georgia';lines(c,headline,62,330,1410,120);
         c.fillStyle='#c6d6c9';c.font='46px Arial';c.fillText(sub,65,573);
       }
+      sampler.drawImage(canvas,0,0,1,1);
+      const [r,g,b]=sampler.getImageData(0,0,1,1).data;
+      tint.setRGB(r/255,g/255,b/255,T.SRGBColorSpace).lerp(white,.48);
+      brightness=6+(r*.21+g*.72+b*.07)/24;
+      for(const light of emitters)light.color.copy(tint);
       tex.needsUpdate=true;
-    },off(){group.visible=false;}
+    },off(){group.visible=false;for(const light of emitters){light.intensity=0;light.visible=false;}}
   };
 }

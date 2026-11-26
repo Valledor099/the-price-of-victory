@@ -18,7 +18,7 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=n=>{n=clamp(n,0,1);return n*n*(3-2*n);};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
-let entranceCheered=false;
+let entranceApplauded=false;
 let dodges=0,lockedCycle=-1;
 let strikeStart,strikeEnd,strikeAxis,relativeHead,otherEye;
 let hits=0,blocks=0,attempt=-1,lastPunch=-1,activeHand=0,lastCard=-1,noticeUntil=0,finStep=-1;
@@ -49,7 +49,7 @@ function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   
 function transition(n){
   stage=n;time=0;noticeUntil=0;w.card.hide();$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   if(n===0){
-    entranceCheered=false;w.card.darken(0);
+    entranceApplauded=false;w.display.glow(0);w.card.darken(0);
     hits=blocks=dodges=0;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[-10,-10];lastCard=-1;finStep=-1;
     w.crowd.visible=true;w.rig.position.set(0,0,12);w.rig.rotation.y=0;const look=w.camera.components['look-controls'];
     look.yawObject.rotation.y=0;look.pitchObject.rotation.x=0;
@@ -57,18 +57,19 @@ function transition(n){
     w.belt.visible=false;w.badge.visible=false;w.gate.visible=false;w.confetti.visible=false;w.light(0);w.display.set('EN VIVO   /   FINAL','The Price of Victory','Ingresá al ring');
     sound.ambience(.23);
   }else if(n===1){
-    if(!entranceCheered){sound.cheer();entranceCheered=true;}
+    if(!entranceApplauded){sound.applaud();entranceApplauded=true;}
+    w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5);
     w.rig.position.set(0,0,1.05);w.opponent.position.set(0,0,-.2);w.gate.visible=true;
     lastPunch=-1;attacks=[-10,-10];sound.ambience(.31);sound.bell();w.display.set('ROUND 01','La gran final','Gatillo o clic para golpear · Agarre o espacio para bloquear');
     tell('Acercate al rival · Clic para golpear · Espacio para bloquear',4);
   }else if(n===2){
-    w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.44);sound.cheer(true);
+    w.display.set('DECISIÓN DEL JURADO','¡Victoria!','Campeón de la final');sound.bell();sound.ambience(.44);sound.applaud(true);
     w.opponent.visible=false;w.confetti.visible=!reduced;w.belt.visible=true;
     w.scene.camera.getWorldDirection(forward);w.ceremony.start(viewerPosition(head),forward);
     tell('Levantás el cinturón de campeón',3);
   }else if(n===3){
     w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.confetti.visible=false;
-    sound.ambience(0);w.display.off();w.light(1);w.card.darken(.80);
+    sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
     w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',1,'question');
   }else if(n===4){lastCard=-1;
   }else if(n===5){w.display.off();finStep=-1;}
@@ -148,11 +149,11 @@ function tick(dt){
     w.desk[i].rotation.x=-.43-.49*extend;w.xr[i].rotation.x=-.8;
   }
   if(stage===0){
-    w.animateBoxer(dt,0,0,0,0,.80);
-    const opening=smooth((time-1.5)/3);
+    w.animateBoxer(dt,time%8>6.6?'Weave':'GuardFootwork',.86);
+    const opening=smooth((time-invitation)/.90);
     w.doors.forEach((door,i)=>door.position.x=(i?1:-1)*1.5*opening);
     move(dt);
-    if(!entranceCheered&&w.rig.position.z<7.75){sound.cheer();entranceCheered=true;}
+    if(time>=invitation&&!entranceApplauded&&w.rig.position.z<6.75){sound.applaud();entranceApplauded=true;}
     if(time<invitation){
       const index=Math.floor(time/lessonTime),local=time%lessonTime;
       const alpha=Math.min(smooth(local/.65),smooth((lessonTime-local)/.85));
@@ -171,17 +172,21 @@ function tick(dt){
     }
   }else if(stage===1){
     move(dt);
-    const cycle=Math.floor(time/3.4),phase=time%3.4,i=cycle%2;
+    const cycle=Math.floor(time/3.4),phase=time%3.4;
     const p=viewerPosition(head),o=w.opponent.position;
     let dx=p.x-o.x,dz=p.z-o.z;const dist=Math.hypot(dx,dz)||.001;
-    const committing=phase>=1.55&&phase<2.81;
-    const speed=committing?0:clamp(dist-1.13,-.9,1.1)*dt;
-    const circle=committing?0:Math.sin(time*1.65)*dt*.34;
+    const committing=phase>=1.55&&phase<2.97;
+    const slipping=!committing&&phase<1.0&&cycle%3===1&&dist<1.55;
+    // Approach from outside, change angle beside the player, then step back to reset.
+    const desiredRange=phase>=2.97?1.40:1.04;
+    const radial=committing||slipping?0:clamp((dist-desiredRange)*1.85,-.68,1.14);
+    const lateral=committing||slipping?0:(cycle%2?-.50:.50)*clamp(1.8-dist,.12,1);
+    const speed=radial*dt,circle=lateral*dt;
     o.x=clamp(o.x+dx/dist*speed+dz/dist*circle,-2.6,2.6);
     o.z=clamp(o.z+dz/dist*speed-dx/dist*circle,-2.6,2.6);
     if(!committing||lockedCycle!==cycle)w.opponent.rotation.y=Math.atan2(dx,dz);o.y=0;
     const reaction=clamp((time-lastHit)/.32,0,1);
-    w.opponent.rotation.x=-.13*Math.sin(reaction*Math.PI);
+
     if(phase>=1.55&&lockedCycle!==cycle){
       lockedCycle=cycle;
       strikeStart.copy(o);strikeStart.y+=1.44;
@@ -189,9 +194,18 @@ function tick(dt){
       const reach=Math.min(1.56,strikeAxis.length());
       strikeEnd.copy(strikeStart).addScaledVector(strikeAxis.normalize(),reach);
     }
-    const swing=phase>2.15&&phase<2.81?Math.sin((phase-2.15)/.66*Math.PI):0;
-    const windup=phase>=1.55&&phase<2.15?Math.sin((phase-1.55)/.6*Math.PI):0;
-    w.animateBoxer(dt,i,windup,swing,Math.sin(reaction*Math.PI),committing?.86:1.13);
+    let motion,pace=1,strikeTime=null;
+    if(committing){
+      motion=cycle%2?'RearCross':cycle%4===2?'LeadArc':'LeadStraight';
+      strikeTime=clamp((phase-1.55)/1.42,0,1);
+    }else if(slipping){
+      motion='Weave';
+    }else if(Math.abs(radial)>Math.abs(lateral)){
+      motion=radial>0?'StepIn':'StepOut';pace=clamp(Math.abs(radial)/.64,.55,1.65);
+    }else{
+      motion=lateral>0?'CircleRight':'CircleLeft';pace=clamp(Math.abs(lateral)/.52,.55,1.4);
+    }
+    w.animateBoxer(dt,motion,pace,strikeTime,Math.sin(reaction*Math.PI));
     if(phase>1.55&&phase<2.14)tell('El rival prepara un golpe',.32);
     if(phase>=2.48&&attempt!==cycle){attempt=cycle;
       if(clearsStrike(head)){dodges++;tell('Esquivaste',.8);}
@@ -225,11 +239,12 @@ function tick(dt){
       if(time>=11.5)transition(4);
     }
   }else if(stage===4){
-    w.card.darken(.80*(1-smooth(time/.55)));
+    w.card.darken(0);
+    w.display.glow(smooth(time/.55));
     const i=Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
     if(i!==lastCard){if(i===0)sound.screensOn();const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
   }else if(stage===5){
-    if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','The Price of Victory');w.badge.visible=true;}
+    if(time>=1.5&&finStep<0){finStep=1;w.display.set('FAIR PLAY','The Price of Victory');w.display.glow(.65);w.badge.visible=true;}
     if(time>=9)finish();
   }
   if(w.badge.visible){

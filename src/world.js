@@ -18,23 +18,33 @@ function model(parent,name){
 }
 function boxerMotion(model){
   const mixer=new T.AnimationMixer(model);
-  const clip=model.animations.find(a=>a.name==='GuardFootwork')||model.animations[0];
-  const guard=mixer.clipAction(clip);guard.play();
-  const upper=['L','R'].map(s=>model.getObjectByName('Drive'+s));
-  const fore=['L','R'].map(s=>model.getObjectByName('Fore'+s));
+  const actions=new Map(model.animations.map(clip=>[clip.name,mixer.clipAction(clip)]));
+  let current=actions.get('GuardFootwork');
+  current.play();
   const chest=model.getObjectByName('Chest'),head=model.getObjectByName('Head');
-  // Restore the keyed arm pose before advancing the mixer and adding this strike.
-  const layered=[chest,head,...upper,...fore],base=layered.map(b=>b.quaternion.clone());
-  return (dt,side=0,load=0,reach=0,hit=0,pace=1)=>{
-    layered.forEach((b,i)=>b.quaternion.copy(base[i]));
-    mixer.update(dt*pace);
-    layered.forEach((b,i)=>base[i].copy(b.quaternion));
-    const sign=side===0?1:-1;
-    chest.rotateY(sign*(.26*load-.46*reach));chest.rotateX(.10*reach-.20*hit);
-    head.rotateY(sign*(.15*reach-.10*load));head.rotateZ(.14*hit*sign);
-    upper[side].rotateX(.25*load-1.48*reach);upper[side].rotateY(sign*.22*reach);
-    fore[side].rotateX(2.10*reach-.25*load);
-    upper[1-side].rotateX(-.17*(load+reach));fore[1-side].rotateX(-.15*reach);
+  const baseChest=chest.quaternion.clone(),baseHead=head.quaternion.clone();
+  return (dt,name='GuardFootwork',pace=1,strikeTime=null,hit=0)=>{
+    const next=actions.get(name);
+    if(current!==next){
+      const phase=current.time/current.getClip().duration;
+      next.reset().play();
+      next.time=(phase%1)*next.getClip().duration;
+      next.weight=0;current=next;
+    }
+    current.timeScale=pace;
+    current.paused=strikeTime!==null;
+    if(current.paused)current.time=strikeTime*current.getClip().duration;
+    // Short overlapping transitions retain the support of the planted foot.
+    const blend=1-Math.exp(-dt*(current.paused?23:14));
+    for(const action of actions.values()){
+      if(!action.isScheduled())continue;
+      action.weight+=((action===current?1:0)-action.weight)*blend;
+      if(action!==current&&action.weight<.002)action.stop();
+    }
+    chest.quaternion.copy(baseChest);head.quaternion.copy(baseHead);
+    mixer.update(dt);
+    baseChest.copy(chest.quaternion);baseHead.copy(head.quaternion);
+    chest.rotateX(-.24*hit);head.rotateZ(.19*hit);
   };
 }
 export async function createWorld(tick) {
@@ -74,15 +84,17 @@ export async function createWorld(tick) {
   const confetti=new T.Points(geo,new T.PointsMaterial({color:0xf8d785,size:.045}));world.add(confetti);confetti.visible=false;
   const badge=new T.Mesh(new T.PlaneGeometry(1.85,.52),new T.MeshBasicMaterial({map:await new T.TextureLoader().loadAsync('assets/fairplay.png'),transparent:true,depthWrite:false}));
   badge.material.map.colorSpace=T.SRGBColorSpace;world.add(badge);badge.visible=false;
-  const lamps=arena.getObjectByName('Lamps'),lampMats=[];
-  lamps?.traverse(n=>{if(n.isMesh)lampMats.push(...[n.material].flat());});
+  const lamps=arena.getObjectByName('Lamps'),emissive=new Map();
+  arena.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat()){
+    if(m.emissive?.getHex())emissive.set(m,m.emissiveIntensity);
+  }});
   const lightColor=new T.Color(),warm=new T.Color('#fff0d6'),cold=new T.Color('#809cae');
-  const skyA=new T.Color('#172324'),skyB=new T.Color('#081119');
+  const skyA=new T.Color('#172324'),skyB=new T.Color('#030609');
   return {scene,rig:rig.object3D,camera,hands,desk,xr,arena,opponent,ceremony,animateBoxer,belt,crowd,display,confetti,badge,card,flashes,
     gate:arena.getObjectByName('Gate'),doors:[arena.getObjectByName('DoorL'),arena.getObjectByName('DoorR')],
-    light(mix){key.intensity=2.8-2.35*mix;ambient.intensity=2.1-1.15*mix;rim.intensity=1.9-1.3*mix;
+    light(mix){key.intensity=2.8*(1-mix);ambient.intensity=2.1*(1-mix)+.035*mix;rim.intensity=1.9*(1-mix);
       ambient.color.copy(lightColor.copy(warm).lerp(cold,mix));world.background?.copy(skyA).lerp(skyB,mix);if(world.fog)world.fog.color.copy(world.background);
-      lampMats.forEach(m=>{m.emissiveIntensity=2*(1-mix);});if(lamps)lamps.visible=mix<.92;
+      emissive.forEach((original,m)=>{m.emissiveIntensity=original*(1-mix);});if(lamps)lamps.visible=mix<.92;
       if(ribbon)ribbon.visible=mix<.35;
 
     }};
