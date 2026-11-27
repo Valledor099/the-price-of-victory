@@ -1,0 +1,42 @@
+FAIR PLAY | EL PRECIO DE LA VICTORIA
+Decisiones de diseño de la experiencia en realidad virtual
+
+El jugador entra al ring para ganar un cinturón. Después de la victoria, los mismos televisores que celebraban el combate muestran testimonios e investigaciones sobre Qatar y Sochi. Ese cambio de función sostiene la pregunta del juego sobre el sportswashing. Mientras el espectáculo exige reaccionar rápido, el archivo invita a detenerse y leer.
+
+1. Llegar al ring desde el propio lugar
+
+Elegimos la posición fija como opción inicial. La persona ve la invitación en el túnel, pulsa un gatillo y pasa al ring durante un breve fundido a negro. En el combate puede esperar a que el rival se acerque. Quien disfruta recorrer el estadio puede elegir el desplazamiento continuo con el stick izquierdo antes de entrar.
+
+Hillmann describe cómo un recorrido visual continuo puede resultar incómodo para algunas personas y cómo otras lo prefieren para explorar. En este juego hay un destino inequívoco, el ring. Por eso resolvimos el traslado con un solo gesto y conservamos la caminata como elección. El fundido identifica el cambio de lugar y evita mostrar un recorrido que el cuerpo no hizo. Cap. 2, pp. 45–47.
+
+2. Girar sin perder el lugar
+
+Desde el ring se puede mirar a cualquiera de los cuatro televisores. El stick derecho gira la vista en pasos de 15°, 30° o 45°, o se puede elegir girar solo con el cuerpo. Dejamos 30° como valor inicial. Para repetir el giro hay que soltar el stick hacia el centro. El giro toma como eje la posición de la cabeza, incluso si la persona se apartó del centro de seguimiento.
+
+Hillmann explica la importancia del giro por pasos para quienes juegan sentados o tienen poco espacio para darse vuelta. También propone ajustar su amplitud. Los tres ángulos son una elección del equipo para ofrecer tanto correcciones pequeñas como cambios amplios de orientación. Cap. 2, p. 47 y cap. 3, p. 106.
+
+3. Ensayar antes de que suene la campana
+
+El túnel funciona como espacio de práctica. Presentamos los controles por etapas, con los guantes puestos y el estadio a la vista. La indicación de movimiento depende de la opción elegida. Quien ya conoce el juego puede desmarcar la práctica antes de entrar. En ambos casos, la invitación permanece visible hasta que la persona decide avanzar.
+
+Hillmann recomienda introducir acciones en incrementos pequeños, dar un anticipo del mundo y permitir que se omita el tutorial. Ubicar la práctica antes del round permite probar el agarre sin perder segundos de combate. Cap. 3, p. 107 y cap. 4, p. 130.
+
+4. Saber si la defensa funcionó
+
+Antes, mensajes como «Esquivaste» y «Bloqueo» quedaban en la interfaz del navegador. Ahora también aparecen dentro del visor, algo por debajo del centro de la mirada, en letras claras sobre fondo oscuro. Duran un instante y dejan libre la vista del rival. Si la persona eligió posición fija y el rival está lejos, el aviso le indica que espere a que se acerque.
+
+Hillmann señala que el texto debe conservar el contraste y que la respuesta a una acción puede percibirse por distintos sentidos. El sonido de contacto acompaña el bloqueo. El mensaje visual distingue un bloqueo de una esquiva aun con el sonido apagado. Cap. 3, pp. 108–109 y cap. 4, p. 152.
+
+5. Darle al testimonio el tiempo que necesita
+
+Conservamos los cuatro televisores del estadio. Durante el round muestran el tiempo y después presentan el archivo. En VR cada ficha permanece hasta que el jugador pulse un gatillo. Puede volver con el agarre y ver en el mismo televisor qué ficha está leyendo. En la cuarta, la indicación cambia a «Gatillo para cerrar» para anticipar el final.
+
+Hillmann llama interfaz diegética a la información presentada mediante objetos que pertenecen al mundo narrado. El televisor tiene sentido para quien acaba de seguir una transmisión deportiva. Usarlo ahora para leer la fuente de un testimonio da otro significado al mismo objeto. Elegimos el ritmo manual para que cada persona pueda girar en busca de una pantalla o releer una frase antes de pasar a la noticia siguiente. Cap. 3, pp. 102 y 108.
+
+Verificación
+
+Recorrimos el juego en navegador y en una sesión WebXR emulada con dos mandos. Comprobamos la entrada con y sin práctica, los dos modos de desplazamiento, el giro por pasos, la respuesta a la defensa y el recorrido hasta los créditos. Dejamos una noticia abierta durante 50 segundos simulados, retrocedimos una ficha y llegamos al cierre mediante el gatillo. Queda pendiente evaluar con personas y un visor físico si los avisos se leen durante el combate y qué desplazamiento les resulta más cómodo.
+
+Fuente
+
+Cornel Hillmann. UX for XR: User Experience Design and Strategies for Immersive Technologies. Segunda edición, Apress. ISBN electrónico 979-8-8688-1591-1. DOI 10.1007/979-8-8688-1591-1. Las referencias corresponden a la numeración impresa en las páginas del libro.

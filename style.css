@@ -13,6 +13,10 @@ dialog{background:#101f22;color:var(--paper);border:1px solid #61756d;border-rad
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .volume-control{display:flex;align-items:center;gap:14px;margin-top:18px;color:#d3dfd8}.volume-control input{min-width:40px;flex:1;accent-color:#a7c6b8}.volume-control output{min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.vr-setting{display:grid;gap:6px;margin-block:16px;font-weight:bold}
+.vr-setting select{width:100%;padding:10px;background:#0a1719;border:1px solid #728a7e;border-radius:3px;color:var(--paper);font:inherit}
+.vr-tutorial{display:flex;align-items:center;gap:9px;margin-top:20px}
+.vr-tutorial input{width:18px;height:18px;accent-color:var(--sage)}
 #hud.closing .score,#hud.closing .game-tools{display:none}
 #end-actions{position:absolute;bottom:max(8vh,26px);inset-inline:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 22px;pointer-events:none}
 #end-actions button{padding:9px 3px;border:0;background:transparent;color:#a7b7b0;font-size:14px;pointer-events:auto}

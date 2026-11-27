@@ -9,7 +9,7 @@ const names=['La entrada','El combate','La victoria','El silencio','Lo que no vi
 const round=38,cardTime=8.5,lessonTime=6;
 const lessons=[
   [['Mouse','Mirá alrededor del estadio'],['Mirá alrededor','Girando la cabeza podés explorar el estadio']],
-  [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá dar unos pasos por el túnel']],
+  [['W A S D','Probá dar unos pasos por el túnel'],['Stick izquierdo','Probá moverte por el túnel']],
   [['Clic izquierdo / derecho','Izquierdo: jab · Derecho: uppercut. Combiná dos y recuperá.'],['Jab / Uppercut','Al frente o hacia arriba. Gatillos izq./der. Combiná dos y recuperá.']],
   [['Espacio','Mantenelo apretado para subir la guardia'],['Agarre','Mantenelo apretado o acercá los guantes a la cara']],
   [['P','Pausá la partida cuando lo necesites'],['Esquivá con el cuerpo','Cuando el rival cargue el golpe, inclinate o agachate']]
@@ -18,6 +18,8 @@ const invitation=lessons.length*lessonTime;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=n=>{n=clamp(n,0,1);return n*n*(3-2*n);};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const vrOptions={movement:'fixed',turn:30,tutorial:true};
+let ringFade=null,archiveIndex=0;
 let w,stage=-1,time=0,running=false,paused=false,immersive=false,finished=false;
 let entranceApplauded=false;
 let dodges=0,lockedCycle=-1;
@@ -32,13 +34,27 @@ function facePoint(i,out){
   out.set(i?.035:-.035,.097,.105);return w.impactTarget.localToWorld(out);
 }
 const guide='WASD para moverte, mouse para mirar, clic izquierdo para jab, clic derecho para uppercut y espacio para bloquear. P pausa la partida. Si el navegador libera el mouse, hacé clic en el ring para recuperarlo.';
-const vrGuide='En VR, mirá alrededor y usá el stick izquierdo para moverte. El derecho gira por pasos. El juego reconoce el jab hacia adelante y el uppercut ascendente con cualquiera de las manos. También podés usar el gatillo izquierdo para jab o el derecho para uppercut. Levantá ambos guantes o mantené el agarre para bloquear. Cuando el rival prepare un golpe, inclinate a un lado o agachate. Al terminar el tutorial podés acercarte al ring con el stick o usar el gatillo cuando aparezca la invitación.';
+const vrGuide='Antes de entrar en VR podés elegir posición fija o movimiento con el stick izquierdo. El derecho gira por pasos. Usá el gatillo para pasar del túnel al ring. En el combate, elegí gestos o gatillos y mantené el agarre para bloquear. En el archivo, el gatillo avanza y el agarre vuelve a la noticia anterior.';
 function modal(title,body,buttons){
   const dialog=$('#modal');if(dialog.open)dialog.close();
   $('#modal-title').textContent=title;$('#modal-body').replaceChildren(...body);
   $('#modal-buttons').replaceChildren(...buttons.map(([label,fn],i)=>{const b=document.createElement('button');b.className=i?'secondary':'primary';b.textContent=label;b.onclick=()=>{dialog.close();fn?.();};return b;}));dialog.showModal();
 }
 function paragraph(text){const p=document.createElement('p');p.textContent=text;return p;}
+function vrSetup(enter){
+  function select(labelText,choices,current,onChange){
+    const label=document.createElement('label'),input=document.createElement('select');
+    label.className='vr-setting';label.append(labelText,input);
+    for(const [value,title] of choices)input.add(new Option(title,value));
+    input.value=current;input.onchange=()=>onChange(input.value);return label;
+  }
+  const movement=select('Desplazamiento',[['fixed','Posición fija'],['stick','Con el stick izquierdo']],vrOptions.movement,value=>vrOptions.movement=value);
+  const turn=select('Giro con el stick derecho',[['15','15°'],['30','30°'],['45','45°'],['0','Solo con el cuerpo']],vrOptions.turn,value=>vrOptions.turn=Number(value));
+  const tutorial=document.createElement('label'),check=document.createElement('input');
+  check.type='checkbox';check.checked=vrOptions.tutorial;check.onchange=()=>vrOptions.tutorial=check.checked;
+  tutorial.className='vr-tutorial';tutorial.append(check,'Practicar en el túnel antes del round');
+  modal('Prepará tu espacio',[paragraph('Dejá espacio libre alrededor de los brazos. Podés jugar desde tu lugar y usar los gatillos y el agarre para boxear.'),movement,turn,tutorial],[['Entrar en VR',enter],['Volver']]);
+}
 function volumeControl(){
   const label=document.createElement('label'),slider=document.createElement('input'),value=document.createElement('output');
   label.className='volume-control';label.append('Volumen',slider,value);
@@ -50,8 +66,11 @@ function volumeControl(){
 $('#help').onclick=()=>modal('Controles',[paragraph(guide),paragraph(vrGuide),volumeControl()],[['Entendido']]);
 $('#audio').onclick=()=>{sound.enabled=!sound.enabled;sound.volume();$('#audio').setAttribute('aria-pressed',sound.enabled);$('#audio span:last-child').textContent=sound.enabled?'Sonido activado':'Sonido apagado';};
 function lock(){if(!immersive&&w?.scene.canvas.requestPointerLock){try{w.scene.canvas.requestPointerLock()?.catch(()=>{});}catch{}}}
-function clearInput(){keys.clear();grips.clear();axis=[0,0];}
-function tell(text,seconds=2){$('#cue').textContent=text;noticeUntil=time+seconds;}
+function clearInput(){keys.clear();grips.clear();axis=[0,0];snapReady=true;gestureReady.fill(false);}
+function tell(text,seconds=2){
+  $('#cue').textContent=text;noticeUntil=time+seconds;
+  if(immersive&&stage===1)w.card.show(text,'',1,'feedback');
+}
 function updateStats(){$('#stats').textContent=stage===1?'Conectados '+hits+'   ·   Bloqueos '+blocks+'   ·   Esquivas '+dodges:'';}
 function showVictoryQuestion(alpha){
   w.card.show('Ganaste. ¿Pero a qué costo?','YOU WON. BUT AT WHAT COST?',alpha,'question');
@@ -62,6 +81,8 @@ function transition(n){
   stage=n;time=0;noticeUntil=0;$('#cue').textContent='';$('#stage').textContent=names[n];$('#clock').textContent='';$('#aim').hidden=n!==1;updateStats();
   $('#hud').classList.toggle('closing',n===5);$('#end-actions').hidden=true;
   if(n===0){
+    ringFade=null;
+    if(immersive&&!vrOptions.tutorial)time=invitation;
     musicStarted=false;sound.stopScore();sound.setApplause(null);guardBlend=gripBlend=0;gestureReady=[false,false];
     entranceApplauded=false;w.display.reset();w.card.darken(0);
     hits=blocks=dodges=0;nextPunchAt=0;answerWeaveAt=-10;lockedCycle=-1;finished=false;attempt=-1;lastPunch=-1;lastHit=-10;boardState='';attacks=[null,null];lastCard=-1;
@@ -84,7 +105,7 @@ function transition(n){
   }else if(n===3){
     w.crowd.visible=false;w.flashes.tick(0,3,reduced);w.confetti.visible=false;
     sound.setApplause(null);sound.ambience(0);w.display.off();w.light(1);w.card.darken(.28);
-  }else if(n===4){lastCard=-1;
+  }else if(n===4){lastCard=-1;archiveIndex=0;
   }else if(n===5){
     w.scene.camera.getWorldDirection(forward);
     w.display.beginShutdown(viewerPosition(head),forward);
@@ -149,7 +170,8 @@ function connect(i,kind,physical,contactDistance=0){
   }
   const range=target.distanceTo(head),aim=target.sub(head).normalize().dot(forward);
   if(!physical&&(contactDistance>.175||range>reach+.04||aim<.72)){
-    tell(range>reach?'Acercate un paso':aim<.72?'Mirá al rival':'El golpe pasó de largo',.55);return;
+    const distanceHint=immersive&&vrOptions.movement==='fixed'?'Esperá que se acerque':'Acercate un paso';
+    tell(range>reach?distanceHint:aim<.72?'Mirá al rival':'El golpe pasó de largo',.55);return;
   }
   hits++;lastHit=time;lastType=kind;
   if(attacks[i].endsCombo)answerWeaveAt=time+(kind==='jab'?.34:.51);
@@ -181,6 +203,7 @@ function guard(){
   return w.hands.every(hand=>{hand.object3D.getWorldPosition(handPos);return handPos.distanceTo(head)<.48&&handPos.y>head.y-.32;});
 }
 function move(dt){
+  if(immersive&&(vrOptions.movement==='fixed'||ringFade!==null))return;
   let x=Number(keys.has('KeyD'))-Number(keys.has('KeyA'))+axis[0],z=Number(keys.has('KeyS'))-Number(keys.has('KeyW'))+axis[1];
   const norm=Math.max(1,Math.hypot(x,z));x/=norm;z/=norm;
   w.scene.camera.getWorldDirection(forward);forward.y=0;forward.normalize();
@@ -190,7 +213,17 @@ function move(dt){
 }
 function tick(dt){
   if(!w||!running||paused||document.hidden)return;
-  time+=dt;if(time>noticeUntil)$('#cue').textContent='';
+  if(ringFade!==null){
+    const prev=ringFade;ringFade+=dt;
+    if(prev<.18&&ringFade>=.18){transition(1);w.card.hide();ringFade=.18;}
+    const opacity=1-Math.abs(ringFade-.18)/.18;
+    w.card.darken(clamp(opacity,0,1),true);
+    if(ringFade>=.36){ringFade=null;tell('Round final por el título mundial',2);}
+    return;
+  }
+  time+=dt;if(time>noticeUntil&&$('#cue').textContent){
+    $('#cue').textContent='';if(immersive&&stage===1)w.card.hide();
+  }
   w.flashes.tick(dt,stage,reduced);
   if(stage<=2&&!reduced){
     const energy=stage===2?1:stage===1?Math.max(.16,(time>round-10?.70:0),1-clamp((time-lastHit)/1.1,0,1)):entranceApplauded?.8:0;
@@ -253,14 +286,15 @@ function tick(dt){
     if(time<invitation){
       const index=Math.floor(time/lessonTime),local=time%lessonTime;
       const alpha=Math.min(smooth(local/.65),smooth((lessonTime-local)/.85));
-      const [key,action]=lessons[index][immersive?1:0];
+      const [key,action]=(immersive&&index===1&&vrOptions.movement==='fixed')
+        ? ['Jugá desde tu lugar','El gatillo te llevará al ring']
+        : lessons[index][immersive?1:0];
       w.card.show(key,action,alpha);
     }else{
       const age=time-invitation;
-      if(age<4.5)w.card.show('Avanzá al ring',immersive?'Usá el stick izquierdo o pulsá el gatillo para entrar':'Caminá hacia el ring con W',Math.min(smooth(age/.6),smooth((4.5-age)/.8)));
-      else if(immersive&&age%14<4){
-        w.card.show('Avanzá al ring','Stick izquierdo o gatillo',smooth((4-age%14)/.7));
-      }else {
+      if(immersive)w.card.show('Avanzá al ring',vrOptions.movement==='fixed'?'Pulsá un gatillo para entrar':'Acercate con el stick o pulsá un gatillo',1);
+      else if(age<4.5)w.card.show('Avanzá al ring','Caminá hacia el ring con W',Math.min(smooth(age/.6),smooth((4.5-age)/.8)));
+      else {
         w.card.hide();
         if(!$('#cue').textContent)tell('Avanzá por el pasillo hasta el ring',4);
       }
@@ -353,8 +387,13 @@ function tick(dt){
   }else if(stage===4){
     w.card.darken(0);
     w.display.glow(smooth(time/.55));
-    const i=Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
-    if(i!==lastCard){if(i===0)sound.screensOn();const c=archive[i];w.display.set(c.place,c.title,'',c);lastCard=i;}
+    const i=immersive?archiveIndex:Math.floor(time/cardTime);if(i>=archive.length){transition(5);return;}
+    if(i!==lastCard){
+      if(lastCard===-1)sound.screensOn();
+      const c=archive[i],advance=i===archive.length-1?'Gatillo para cerrar':'Gatillo para seguir';
+      const nav=immersive?(i+1)+' / '+archive.length+'   ·   '+advance+(i?'   ·   Agarre para volver':''):'';
+      w.display.set(c.place,c.title,nav,c);lastCard=i;
+    }
   }else if(stage===5){
     const lastLight=1-smooth((time-7.3)/1.5);
     const ink=1-smooth((time-7.85)/1.05);
@@ -377,13 +416,45 @@ function bind(){
     lock();punch(e.button===2?1:0,e.button===2?'uppercut':'jab');
   }});
   w.hands.forEach((h,i)=>{
-    h.addEventListener('triggerdown',()=>{if(finished){begin();return;}if(running&&!paused&&stage===0&&time>=invitation){transition(1);return;}punch(i,i?'uppercut':'jab');});
-    h.addEventListener('gripdown',()=>grips.add(i));h.addEventListener('gripup',()=>grips.delete(i));
-    h.addEventListener('thumbstickmoved',e=>{const {x,y}=e.detail;if(!i)axis=[Math.abs(x)>.16?x:0,Math.abs(y)>.16?y:0];else if(Math.abs(x)<.3)snapReady=true;else if(Math.abs(x)>.75&&snapReady){w.rig.rotation.y-=Math.sign(x)*Math.PI/6;snapReady=false;}});
+    h.addEventListener('triggerdown',()=>{
+      if(!immersive||paused||ringFade!==null)return;
+      if(finished){begin();return;}
+      if(!running)return;
+      if(stage===0&&time>=invitation){w.card.hide();ringFade=0;return;}
+      if(stage===4){if(lastCard===archiveIndex)archiveIndex++;return;}
+      punch(i,i?'uppercut':'jab');
+    });
+    h.addEventListener('gripdown',()=>{
+      if(!immersive||!running||paused)return;
+      if(stage===4){if(lastCard===archiveIndex)archiveIndex=Math.max(0,archiveIndex-1);return;}
+      grips.add(i);
+    });h.addEventListener('gripup',()=>grips.delete(i));
+    h.addEventListener('thumbstickmoved',e=>{
+      if(!immersive||!running||paused||ringFade!==null)return;
+      const {x,y}=e.detail;
+      if(!i){axis=[Math.abs(x)>.16?x:0,Math.abs(y)>.16?y:0];return;}
+      if(Math.abs(x)<.3)snapReady=true;
+      if(Math.abs(x)<=.75||!snapReady||!vrOptions.turn)return;
+      snapReady=false;
+      const angle=-Math.sign(x)*vrOptions.turn*Math.PI/180;
+      // Pivot around the viewer even when they are off the tracking origin.
+      viewerPosition(head);
+      const dx=head.x-w.rig.position.x,dz=head.z-w.rig.position.z;
+      w.rig.position.x+=dx-dx*Math.cos(angle)-dz*Math.sin(angle);
+      w.rig.position.z+=dz+dx*Math.sin(angle)-dz*Math.cos(angle);
+      w.rig.rotation.y+=angle;
+    });
   });
-  w.scene.addEventListener('exit-vr',()=>{immersive=false;clearInput();if(finished)finish();else if(running&&!paused)togglePause();});
+  w.scene.addEventListener('exit-vr',()=>{
+    if(!immersive)return;
+    immersive=false;clearInput();
+    if(ringFade!==null){ringFade=null;w.card.darken(0);}
+    if(stage===1)w.card.hide();
+    if(stage===4){time=Math.min(archiveIndex,archive.length-1)*cardTime;lastCard=-1;}
+    if(finished)finish();else if(running&&!paused)togglePause();
+  });
   $('#start').onclick=begin;$('#replay').onclick=begin;$('#sources').onclick=showSources;$('#to-cover').onclick=home;
-  $('#vr').onclick=async()=>{try{await w.scene.enterVR();immersive=!!w.scene.renderer.xr.isPresenting;if(!immersive)throw Error();begin();}catch{modal('El casco no inició la sesión',[paragraph('Comprobá la conexión del visor y el permiso de realidad virtual del navegador.')],[['Entendido']]);}};
+  $('#vr').onclick=()=>vrSetup(async()=>{try{await w.scene.enterVR();immersive=!!w.scene.renderer.xr.isPresenting;if(!immersive)throw Error();begin();}catch{modal('El casco no inició la sesión',[paragraph('Comprobá la conexión del visor y el permiso de realidad virtual del navegador.')],[['Entendido']]);}});
 }
 async function init(){
   // Keep a working cover and instructions even when the device cannot create WebGL.

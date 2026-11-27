@@ -80,6 +80,10 @@ export async function boards(world) {
         c.font='29px Arial';c.fillStyle='#b8c7bf';
         if(card.credit)lines(c,card.credit,980,476,512,35);
         c.fillText(card.source,980,613);
+        if(sub){
+          c.fillStyle='#101e20';c.fillRect(0,562,945,98);
+          c.font='bold 34px Arial';c.fillStyle='#fcf7e9';c.fillText(sub,28,622,888);
+        }
       }else{
         c.fillStyle='#dcb472';c.fillRect(0,0,1536,13);c.font='bold 40px Arial';c.fillText(label,65,101);
         c.fillStyle='#f3eee2';c.font='bold 116px Georgia';lines(c,headline,62,330,1410,120);

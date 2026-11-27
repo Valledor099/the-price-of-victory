@@ -14,15 +14,15 @@ export function centerCard(camera) {
     color:0x030606,side:T.BackSide,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,fog:false
   }));
   shade.name='Oscuridad del estadio';shade.visible=false;shade.renderOrder=24;camera.add(shade);
-  let last='';
+  let last='',lastAction='',lastStyle='';
   return {
     darken(alpha,black=false){shade.material.color.setHex(black?0x000000:0x030606);shade.material.opacity=alpha;shade.visible=alpha>.001;},
     show(key,action,alpha=1,style='lesson') {
-      if(key!==last){
-        last=key;panel.userData.cue=key;
+      if(key!==last||action!==lastAction||style!==lastStyle){
+        last=key;lastAction=action;lastStyle=style;panel.userData.cue=key;
         ctx.clearRect(0,0,1280,336);
         panel.scale.setScalar(style==='question'?1.48:1);
-        panel.position.y=style==='question'?0:.035;
+        panel.position.y=style==='feedback'?-.43:style==='question'?0:.035;
         ctx.save();
         if(style==='question'){
           const vignette=ctx.createRadialGradient(640,168,48,640,168,624);
@@ -31,6 +31,12 @@ export function centerCard(camera) {
           ctx.shadowColor='#020809';ctx.shadowBlur=9;ctx.fillStyle='#ffd04e';
           ctx.font='bold 108px Georgia';ctx.fillText(key,640,182,1200);
           ctx.font='bold 30px Arial';ctx.fillStyle='#edc878';ctx.fillText(action,640,252);
+        }else if(style==='feedback'){
+          ctx.font='bold 56px Arial';ctx.textAlign='center';
+          const width=Math.min(1180,ctx.measureText(key).width+84);
+          ctx.fillStyle='rgba(5,16,20,.94)';
+          ctx.beginPath();ctx.roundRect((1280-width)/2,113,width,108,18);ctx.fill();
+          ctx.fillStyle='#fcf7e9';ctx.fillText(key,640,186,width-44);
         }else{
           ctx.fillStyle='rgba(5,16,20,.93)';
           ctx.beginPath();ctx.roundRect(60,26,1160,284,18);ctx.fill();
